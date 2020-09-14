@@ -7,15 +7,15 @@ from skimage.segmentation import watershed
 from skimage.filters import roberts
 from sklearn.mixture import GaussianMixture
 import matplotlib.pyplot as plt
-from motionmapperpy import mmutils
+from .mmutils import *
 
-bmapcmap = mmutils.gencmap()
+bmapcmap = gencmap()
 
 
 def wshedTransform(zValues, min_regions, sigma, tsnefolder, saveplot=True):
     print('Starting watershed transform...')
 
-    bounds, xx, density = mmutils.findPointDensity(zValues, sigma, 610,
+    bounds, xx, density = findPointDensity(zValues, sigma, 610,
                                                    rangeVals=[-np.abs(zValues).max() - 15, np.abs(zValues).max() + 15])
     wshed = watershed(-density, connectivity=10)
     wshed[density < 1e-5] = 0
@@ -27,7 +27,7 @@ def wshedTransform(zValues, min_regions, sigma, tsnefolder, saveplot=True):
 
     while numRegs > min_regions:
         sigma += 0.05
-        _, xx, density = mmutils.findPointDensity(zValues, sigma, 610,
+        _, xx, density = findPointDensity(zValues, sigma, 610,
                                                   rangeVals=[-np.abs(zValues).max() - 15, np.abs(zValues).max() + 15])
         wshed = watershed(-density, connectivity=10)
         wshed[density < 1e-5] = 0
@@ -45,7 +45,7 @@ def wshedTransform(zValues, min_regions, sigma, tsnefolder, saveplot=True):
         fig, axes = plt.subplots(1, 2, figsize=(10, 6))
         fig.subplots_adjust(0, 0, 1, 1, 0, 0)
         ax = axes[0]
-        ax.imshow(mmutils.randomizewshed(wshed), origin='lower', cmap=bmapcmap)
+        ax.imshow(randomizewshed(wshed), origin='lower', cmap=bmapcmap)
         for i in np.unique(wshed)[1:]:
             fontsize = 8
             xinds, yinds = np.where(wshed == i)
@@ -87,7 +87,7 @@ def velGMM(ampV, parameters, taskFolder, saveplot=True):
         for (c, compno, mu, sigma, p) in \
                 zip(['royalblue', 'firebrick'], [1, 2], gm.means_.squeeze(), np.sqrt(gm.covariances_.squeeze()),
                     gm.weights_):
-            ax.plot(bins, mmutils.getPDF(bins, mu, sigma, p), label='Component %i' % compno, color=c, alpha=0.5)
+            ax.plot(bins, getPDF(bins, mu, sigma, p), label='Component %i' % compno, color=c, alpha=0.5)
 
         ax.plot(bins, gm.predict_proba(bins[:, None])[:, minind], label='pRest')
         ax.axvline(bins[np.where(gm.predict_proba(bins[:, None])[:, minind] < 0.33)[0][0]], color='firebrick',

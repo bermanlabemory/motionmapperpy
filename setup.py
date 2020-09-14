@@ -11,8 +11,8 @@ setuptools.setup(
     description="A modified Python Implemention of MotionMapper (https://github.com/gordonberman/MotionMapper)",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/kanishkbjain/motionmapperpy",
-    download_url="https://github.com/kanishkbjain/motionmapperpy.git",
+    url="https://github.com/bermanlabemory/motionmapperpy",
+    download_url="https://github.com/bermanlabemory/motionmapperpy.git",
     install_requires=[
         "numpy",
         "scipy",

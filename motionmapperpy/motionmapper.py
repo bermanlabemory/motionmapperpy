@@ -1,27 +1,25 @@
-import os
-import numpy as np
+import os, time, glob, shutil
+import multiprocessing as mp
 
+import matplotlib
+matplotlib.use('Agg')
+
+import numpy as np
 from scipy.io import savemat, loadmat
 from sklearn.manifold import TSNE
 import hdf5storage
-from .setrunparameters import setRunParameters
-import time
 from sklearn.neighbors import NearestNeighbors
-from .wavelet import findWavelets
-from .mmutils import findPointDensity, gencmap
 from skimage.segmentation import watershed
-import glob
-import shutil
 import h5py
 from easydict import EasyDict as edict
 from scipy.spatial import Delaunay
 from scipy.optimize import fmin
-import multiprocessing as mp
-import matplotlib
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from skimage.filters import roberts
 
+from .wavelet import findWavelets
+from .mmutils import findPointDensity, gencmap
+from .setrunparameters import setRunParameters
 """Core t-SNE MotionMapper functions."""
 
 def findKLDivergences(data):

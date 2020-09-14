@@ -20,5 +20,5 @@ https://docs.cupy.dev/en/stable/install.html
 After installation, run "python3 demo/demo.py". 
 
 ## Issues:
-Please post any code related issues at https://github.com/kanishkbjain/motionmapperpy/issues with a complete error 
+Please post any code related issues at https://github.com/bermanlabemory/motionmapperpy/issues with a complete error 
 trace where possible. 
