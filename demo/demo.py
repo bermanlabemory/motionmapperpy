@@ -12,6 +12,13 @@ import motionmapperpy as mmpy
 
 """1. Lets first create mock data to embed with the package."""
 
+# Create a project folder which contains all the data that you want to embed in a single map.
+os.mkdir('../data')
+os.mkdir('../data/TestProject')
+os.mkdir('../data/TestProject/Projections')
+os.mkdir('../data/TestProject/TSNE')
+
+# Now add some mock projections to Projections folder. Please note the identifier "pcaModes.mat" for projections.
 for i in range(5):
     projs = np.concatenate([np.random.normal(loc=(np.random.rand()-0.5)*2, scale=0.5, size=(20000,1)) for j in range(15)],
                            axis=1)
