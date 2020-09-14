@@ -1,0 +1,87 @@
+import numpy as np
+from scipy.fft import fft2, ifft2, fftshift
+import copy
+import matplotlib as mpl
+from scipy.io import loadmat
+import h5py
+import hdf5storage
+
+
+def gencmap():
+    colors = np.zeros((64, 3))
+    colors[:21, 0] = np.linspace(1, 0, 21)
+    colors[20:43, 0] = np.linspace(0, 1, 23)
+    colors[42:, 0] = 1.0
+
+    colors[:21, 1] = np.linspace(1, 0, 21)
+    colors[20:43, 1] = np.linspace(0, 1, 23)
+    colors[42:, 1] = np.linspace(1, 0, 22)
+
+    colors[:21, 2] = 1.0
+    colors[20:43, 2] = np.linspace(1, 0, 23)
+    colors[42:, 2] = 0.0
+    return mpl.colors.ListedColormap(colors)
+
+
+def getDensityBounds(density, thresh=1e-6):
+    x_w, y_w = np.where(density > thresh)
+    x, inv_inds = np.unique(x_w, return_inverse=True)
+    bounds = np.zeros((x.shape[0] * 2 + 1, 2))
+    for i in range(x.shape[0]):
+        bounds[i, 0] = x[i]
+        bounds[i, 1] = np.min(y_w[x_w == bounds[i, 0]])
+        bounds[x.shape[0] + i, 0] = x[-i - 1]
+        bounds[x.shape[0] + i, 1] = np.max(y_w[x_w == bounds[x.shape[0] + i, 0]])
+    bounds[-1] = bounds[0]
+    bounds[:, [0, 1]] = bounds[:, [1, 0]]
+    return bounds.astype(int)
+
+
+def findPointDensity(zValues, sigma, numPoints, rangeVals):
+    xx = np.linspace(rangeVals[0], rangeVals[1], numPoints)
+    yy = copy.copy(xx)
+    [XX, YY] = np.meshgrid(xx, yy)
+    G = np.exp(-0.5 * (np.square(XX) + np.square(YY)) / np.square(sigma))
+    Z = np.histogramdd(zValues, bins=[xx, yy])[0]
+    Z = Z / np.sum(Z)
+    Z = np.pad(Z, ((0, 1), (0, 1)), mode='constant', constant_values=((0, 0), (0, 0)))
+    density = fftshift(np.real(ifft2(np.multiply(fft2(G), fft2(Z))))).T
+    density[density < 0] = 0
+    bounds = getDensityBounds(density)
+    return bounds, xx, density
+
+
+def randomizewshed(wshed):
+    outwshed = np.zeros_like(wshed)
+    regs = np.unique(wshed)[1:]
+    np.random.shuffle(regs)
+    for i, wreg in enumerate(regs):
+        outwshed[wshed==wreg] = i
+    return outwshed
+
+
+def getPDF(x, mu, sigma, p):
+    return (p / np.sqrt(2 * np.pi * (sigma ** 2))) * np.exp(-.5 * (x - mu) ** 2 / sigma ** 2)
+
+
+def conV2matV7(matfile):
+    try:
+        a = loadmat(matfile)
+        _ = [a.pop(i) for i in list(a.keys()) if '__' in i]
+        hdf5storage.write(data=a, path='/', truncate_existing=True, filename=matfile, store_python_metadata=False,
+                          matlab_compatible=True)
+        print('File converted to MATLAB -v7.3')
+        return
+    except Exception as E:
+        try:
+            h5file = h5py.File(matfile, 'r')
+            print('File already to MATLAB -v7.3')
+            return
+        except Exception as F:
+            print('Something bad happened. File could be lost.')
+            print(E)
+            print(F)
+            return
+
+
+
