@@ -41,6 +41,13 @@ def findKLDivergences(data):
 
 
 def run_tSne(data, parameters=None):
+    """
+    run_tSne runs the t-SNE algorithm on an array of normalized wavelet amplitudes
+    :param data: Nxd array of wavelet amplitudes (will normalize if unnormalized) containing N data points
+    :param parameters: motionmapperpy Parameters dictionary.
+    :return:
+            yData -> N x 2 array of embedding results
+    """
     parameters = setRunParameters(parameters)
 
     vals = np.sum(data, 1)
@@ -214,6 +221,18 @@ def file_embeddingSubSampling(projectionFile, parameters):
     return yData,signalData,signalIdx,signalAmps
 
 def runEmbeddingSubSampling(projectionDirectory, parameters):
+    """
+    runEmbeddingSubSampling generates a training set given a set of .mat files.
+
+    :param projectionDirectory: directory path containing .mat projection files.
+    Each of these files should contain an N x pcaModes variable, 'projections'.
+    :param parameters: motionmapperpy Parameters dictionary.
+    :return:
+        trainingSetData -> normalized wavelet training set
+                           (N x (pcaModes*numPeriods) )
+        trainingSetAmps -> Nx1 array of training set wavelet amplitudes
+        projectionFiles -> list of files in 'projectionDirectory'
+    """
     parameters = setRunParameters(parameters)
     projectionFiles = glob.glob(projectionDirectory+'/*pcaModes.mat')
     
@@ -248,6 +267,9 @@ def runEmbeddingSubSampling(projectionDirectory, parameters):
     return trainingSetData,trainingSetAmps,projectionFiles
 
 def subsampled_tsne_from_projections(parameters,results_directory):
+    """
+    Wrapper function for training set subsampling and mapping.
+    """
     projection_directory = results_directory+'/Projections/'
 
     tsne_directory= results_directory+'/TSNE/'
@@ -479,6 +501,16 @@ def findTDistributedProjections_fmin(data, trainingData, trainingEmbedding, para
 
 
 def findEmbeddings(projections, trainingData, trainingEmbedding, parameters):
+    """
+    findEmbeddings finds the optimal embedding of a data set into a previously
+    found t-SNE embedding.
+    :param projections:  N x (pcaModes x numPeriods) array of projection values.
+    :param trainingData: Nt x (pcaModes x numPeriods) array of wavelet amplitudes containing Nt data points.
+    :param trainingEmbedding: Nt x 2 array of embeddings.
+    :param parameters: motionmapperpy Parameters dictionary.
+    :return: zValues : N x 2 array of embedding results, outputStatistics : dictionary containing other parametric
+    outputs.
+    """
     d = projections.shape[1]
     numModes = parameters.pcaModes
     numPeriods = parameters.numPeriods

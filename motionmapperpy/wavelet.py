@@ -1,6 +1,22 @@
 import time
 import warnings
 def findWavelets(projections, pcaModes, omega0, numPeriods, samplingFreq, maxF, minF, numProcessors, useGPU):
+    """
+    findWavelets finds the wavelet transforms resulting from a time series.
+    :param projections: N x d array of projection values.
+    :param pcaModes: # of transforms to find.
+    :param omega0: Dimensionless morlet wavelet parameter.
+    :param numPeriods: number of wavelet frequencies to use.
+    :param samplingFreq: sampling frequency (Hz).
+    :param maxF: maximum frequency for wavelet transform (Hz).
+    :param minF: minimum frequency for wavelet transform (Hz).
+    :param numProcessors: number of processors to use in parallel code.
+    :param useGPU: GPU to use.
+    :return:
+            amplitudes -> wavelet amplitudes (N x (pcaModes*numPeriods) )
+            f -> frequencies used in wavelet transforms (Hz)
+
+    """
     t1 = time.time()
     print('\t Calculating wavelets, clock starting.')
 

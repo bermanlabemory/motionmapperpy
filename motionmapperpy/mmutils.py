@@ -5,9 +5,13 @@ import matplotlib as mpl
 from scipy.io import loadmat
 import h5py
 import hdf5storage
-
+import matplotlib.colors
 
 def gencmap():
+    """
+    Get behavioral map colormap as a matplotlib colormap instance.
+    :return: Matplotlib colormap instance.
+    """
     colors = np.zeros((64, 3))
     colors[:21, 0] = np.linspace(1, 0, 21)
     colors[20:43, 0] = np.linspace(0, 1, 23)
@@ -24,6 +28,12 @@ def gencmap():
 
 
 def getDensityBounds(density, thresh=1e-6):
+    """
+    Get the outline for density maps.
+    :param density: m by n density image.
+    :param thresh: Density threshold for boundaries. Default 1e-6.
+    :return: (p by 2) points outlining density map.
+    """
     x_w, y_w = np.where(density > thresh)
     x, inv_inds = np.unique(x_w, return_inverse=True)
     bounds = np.zeros((x.shape[0] * 2 + 1, 2))
@@ -38,6 +48,18 @@ def getDensityBounds(density, thresh=1e-6):
 
 
 def findPointDensity(zValues, sigma, numPoints, rangeVals):
+    """
+    findPointDensity finds a Kernel-estimated PDF from a set of 2D data points
+    through convolving with a gaussian function.
+    :param zValues: 2d points of shape (m by 2).
+    :param sigma: standard deviation of smoothing gaussian.
+    :param numPoints: Output density map dimension (n x n).
+    :param rangeVals: 1 x 2 array giving the extrema of the observed range
+    :return:
+        bounds -> Outline of the density map (k x 2).
+        xx -> 1 x numPoints array giving the x and y axis evaluation points.
+%       density -> numPoints x numPoints array giving the PDF values (n by n) density map.
+    """
     xx = np.linspace(rangeVals[0], rangeVals[1], numPoints)
     yy = copy.copy(xx)
     [XX, YY] = np.meshgrid(xx, yy)

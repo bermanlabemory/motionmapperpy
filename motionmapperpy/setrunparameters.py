@@ -1,6 +1,11 @@
 from easydict import EasyDict as edict
 
 def setRunParameters(parameters=None):
+    """
+    Get parameter dictionary for running motionmapperpy.
+    :param parameters: Existing parameter dictionary, defaults will be filled for missing keys.
+    :return: Parameter dictionary.
+    """
     if isinstance(parameters, dict):
         parameters = edict(parameters)
     else:
