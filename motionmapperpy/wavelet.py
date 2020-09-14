@@ -1,11 +1,17 @@
 import time
-
+import warnings
 def findWavelets(projections, pcaModes, omega0, numPeriods, samplingFreq, maxF, minF, numProcessors, useGPU):
     t1 = time.time()
     print('\t Calculating wavelets, clock starting.')
 
     if useGPU>=0:
-        import cupy as np
+        try:
+            import cupy as np
+        except ModuleNotFoundError as E:
+            warnings.warn("Trying to use GPU but cupy is not installed. Install cupy or set parameters.useGPU = -1. "
+                  "https://docs.cupy.dev/en/stable/install.html")
+            raise E
+
         np.cuda.Device(useGPU).use()
         print('\t Using GPU #%i'%useGPU)
     else:

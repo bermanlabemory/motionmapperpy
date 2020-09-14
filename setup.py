@@ -11,7 +11,6 @@ setuptools.setup(
     description="A modified Python Implemention of MotionMapper (https://github.com/gordonberman/MotionMapper)",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    license="Apache 2.0",
     url="https://github.com/kanishkbjain/motionmapperpy",
     download_url="https://github.com/kanishkbjain/motionmapperpy.git",
     install_requires=[
@@ -20,7 +19,6 @@ setuptools.setup(
         "matplotlib",
         "h5py",
         "hdf5storage",
-        "cupy",
         "scikit-learn",
         "scikit-image",
         "easydict",
@@ -29,7 +27,6 @@ setuptools.setup(
     classifiers=[
     "Programming Language :: Python :: 3",
     "Intended Audience :: Science/Research"
-    "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
     "Development Status :: 4 - Beta",
     ""

@@ -6,7 +6,6 @@ from sklearn.manifold import TSNE
 import hdf5storage
 from .setrunparameters import setRunParameters
 import time
-from tqdm import tqdm
 from sklearn.neighbors import NearestNeighbors
 from .wavelet import findWavelets
 from .mmutils import findPointDensity, gencmap
@@ -18,7 +17,6 @@ from easydict import EasyDict as edict
 from scipy.spatial import Delaunay
 from scipy.optimize import fmin
 import multiprocessing as mp
-import cupy as cp
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt

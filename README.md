@@ -8,5 +8,17 @@ Package functionalities include:
 - Re-embedding new points on a learned tSNE map. 
 - Watershed segmentation and grouping. 
 
-To see the demo run, please call "python3 demo/run.py" after installing necessary package dependencies.
-    
+## Installation:
+1. (OPTIONAL) Create a new conda environment <code>conda create -n mmenv python=3.6</code>
+2. Activate desired conda environemnt <code>conda activate mmenv</code> 
+3. Download the repository and unzip contents. Open terminal and navigate to unzipped folder containing setup.py.
+4. Run <code>python setup.py install</code>
+5. Additionally, install cupy (if GPU present on system) by following the instructions here. 
+https://docs.cupy.dev/en/stable/install.html
+
+## Demo.
+After installation, run "python3 demo/demo.py". 
+
+## Issues:
+Please post any code related issues at https://github.com/kanishkbjain/motionmapperpy/issues with a complete error 
+trace where possible. 
