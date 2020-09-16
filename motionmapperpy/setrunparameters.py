@@ -39,6 +39,8 @@ def setRunParameters(parameters=None):
 
 
     """%%%%%%%% t-SNE Parameters %%%%%%%%"""
+    # Global tSNE method - 'barnes_hut' or 'exact'
+    tSNE_method = 'barnes_hut'
 
     # %2^H (H is the transition entropy)
     perplexity = 32
@@ -66,6 +68,7 @@ def setRunParameters(parameters=None):
 
     # %minimum training set template length
     minTemplateLength = 1
+
 
 
     """%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%"""

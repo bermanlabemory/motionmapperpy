@@ -58,7 +58,8 @@ def run_tSne(data, parameters=None):
     D = np.square(D)
 
     print('Computing t-SNE')
-    tsne = TSNE(perplexity=parameters.perplexity, metric='precomputed', verbose=1, n_jobs=-1)
+    tsne = TSNE(perplexity=parameters.perplexity, metric='precomputed', verbose=1, n_jobs=-1,
+                method=parameters.tSNE_method)
     yData = tsne.fit_transform(D)
     return yData
 
@@ -212,7 +213,8 @@ def file_embeddingSubSampling(projectionFile, parameters):
 
     print('\t Running t-SNE')
     parameters.perplexity = perplexity
-    tsne = TSNE(perplexity=parameters.perplexity, metric='precomputed', verbose=1, n_jobs=-1)
+    tsne = TSNE(perplexity=parameters.perplexity, metric='precomputed', verbose=1, n_jobs=-1,
+                method=parameters.tSNE_method)
     yData = tsne.fit_transform(D)
 
 
