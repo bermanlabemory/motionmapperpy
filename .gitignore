@@ -143,3 +143,4 @@ data/TestProject/Projections/*
 data/TestProject/TSNE/*
 data/
 
+.DS_Store

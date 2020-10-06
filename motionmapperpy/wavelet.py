@@ -1,3 +1,11 @@
+"""
+Exact copy of wavelet calculation in Gordon Berman's MotionMapper code.
+
+Written by :
+Kanishk Jain
+kanishkbjain@gmail.com
+"""
+
 import time
 import warnings
 def findWavelets(projections, pcaModes, omega0, numPeriods, samplingFreq, maxF, minF, numProcessors, useGPU):

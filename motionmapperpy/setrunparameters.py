@@ -91,14 +91,15 @@ def setRunParameters(parameters=None):
     if not 'minF' in parameters.keys():
         parameters.minF = minF
 
-
-
     if not 'maxF' in parameters.keys():
         parameters.maxF = maxF
 
+
+    if not 'tSNE_method' in parameters.keys():
+        parameters.tSNE_method = tSNE_method
+
     if not 'perplexity' in parameters.keys():
         parameters.perplexity = perplexity
-
 
     if not 'embedding_batchSize' in parameters.keys():
         parameters.embedding_batchSize = embedding_batchSize
