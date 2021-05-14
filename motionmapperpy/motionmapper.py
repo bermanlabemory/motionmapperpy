@@ -12,7 +12,7 @@ from sklearn.neighbors import NearestNeighbors
 from skimage.segmentation import watershed
 import h5py
 from easydict import EasyDict as edict
-from scipy.spatial import Delaunay
+from scipy.spatial import Delaunay, distance
 from scipy.optimize import fmin
 import matplotlib.pyplot as plt
 from skimage.filters import roberts
@@ -20,6 +20,9 @@ from skimage.filters import roberts
 from .wavelet import findWavelets
 from .mmutils import findPointDensity, gencmap
 from .setrunparameters import setRunParameters
+from umap import UMAP
+import pickle
+
 """Core t-SNE MotionMapper functions."""
 
 def findKLDivergences(data):
@@ -37,6 +40,34 @@ def findKLDivergences(data):
     np.fill_diagonal(D, 0)
     return D, entropies
 
+def run_UMAP(data, parameters, save_model=True):
+    if not parameters.waveletDecomp:
+        raise ValueError('UMAP not implemented without wavelet decomposition.')
+
+    vals = np.sum(data, 1)
+    if ~np.all(vals == 1):
+        data = data / vals[:, None]
+
+    umapfolder = parameters['taskFolder'] + '/UMAP/'
+    n_neighbors, train_negative_sample_rate, min_dist, umap_output_dims, n_training_epochs = parameters['n_neighbors'], \
+                                            parameters['train_negative_sample_rate'], parameters['min_dist'], \
+                                            parameters['umap_output_dims'], parameters['n_training_epochs']
+
+    um = UMAP(n_neighbors=n_neighbors, negative_sample_rate=train_negative_sample_rate, min_dist=min_dist,
+              n_components=umap_output_dims, n_epochs=n_training_epochs)
+    y = um.fit_transform(data)
+    trainmean = np.mean(y, 0)
+    scale = (parameters['rescale_max']/np.abs(y).max())
+    y = y - trainmean
+    y = y * scale
+
+    if save_model:
+        print('Saving UMAP model to disk...')
+        np.save(umapfolder+'_trainMeanScale.npy', np.array([trainmean, scale]))
+        with open(umapfolder+'umap.model', 'wb') as f:
+            pickle.dump(um, f)
+
+    return y
 
 def run_tSne(data, parameters=None):
     """
@@ -52,15 +83,21 @@ def run_tSne(data, parameters=None):
     if ~np.all(vals == 1):
         data = data / vals[:, None]
 
-    print('Finding Distances')
-    D, _ = findKLDivergences(data)
-    D[~np.isfinite(D)] = 0.0
-    D = np.square(D)
+    if parameters.waveletDecomp:
+        print('Finding Distances')
+        D, _ = findKLDivergences(data)
+        D[~np.isfinite(D)] = 0.0
+        D = np.square(D)
 
-    print('Computing t-SNE')
-    tsne = TSNE(perplexity=parameters.perplexity, metric='precomputed', verbose=1, n_jobs=-1,
-                method=parameters.tSNE_method)
-    yData = tsne.fit_transform(D)
+        print('Computing t-SNE')
+        tsne = TSNE(perplexity=parameters.perplexity, metric='precomputed', verbose=1, n_jobs=-1,
+                    method=parameters.tSNE_method)
+        yData = tsne.fit_transform(D)
+    else:
+        tsne = TSNE(perplexity=parameters.perplexity, metric='euclidean', verbose=1, n_jobs=-1,
+                    method=parameters.tSNE_method)
+        yData = tsne.fit_transform(data)
+        # raise ValueError('tSNE not implemented for runs without wavelet decomposition.')
     return yData
 
 
@@ -188,36 +225,35 @@ def file_embeddingSubSampling(projectionFile, parameters):
 
     firstFrame = (N%numPoints)
 
-
-    print('\t Calculating Wavelets')
-    data, _ = mm_findWavelets(projections, numModes, parameters)
-    signalIdx = np.indices((data.shape[0],))[0]
-    signalIdx = signalIdx[firstFrame:int(firstFrame + (numPoints) * skipLength): skipLength]
-
-
-    if parameters.useGPU >= 0:
-        data2 = data[signalIdx].copy()
-        signalData = data2.get()
-        del data, data2
+    if parameters.waveletDecomp:
+        print('\t Calculating Wavelets')
+        data, _ = mm_findWavelets(projections, numModes, parameters)
+        signalIdx = np.indices((data.shape[0],))[0]
+        signalIdx = signalIdx[firstFrame:int(firstFrame + (numPoints) * skipLength): skipLength]
+        if parameters.useGPU >= 0:
+            data2 = data[signalIdx].copy()
+            signalData = data2.get()
+            del data, data2
+        else:
+            signalData = data[signalIdx]
     else:
+        print('Using projections for tSNE. No wavelet decomposition.')
+        data = projections
+        signalIdx = np.indices((data.shape[0],))[0]
+        signalIdx = signalIdx[firstFrame:int(firstFrame + (numPoints) * skipLength): skipLength]
         signalData = data[signalIdx]
 
     signalAmps = np.sum(signalData, axis=1)
 
     signalData = signalData/signalAmps[:,None]
 
-    print('\t Calculating Distances')
-    D, _ = findKLDivergences(signalData)
-    D[~np.isfinite(D)] = 0.0
-    D = np.square(D)
-
-    print('\t Running t-SNE')
-    parameters.perplexity = perplexity
-    tsne = TSNE(perplexity=parameters.perplexity, metric='precomputed', verbose=1, n_jobs=-1,
-                method=parameters.tSNE_method)
-    yData = tsne.fit_transform(D)
-
-
+    if parameters.method == 'TSNE':
+        parameters.perplexity = perplexity
+        yData = run_tSne(signalData, parameters)
+    elif parameters.method == 'UMAP':
+        yData = run_UMAP(signalData, parameters, save_model=False)
+    else:
+        raise ValueError('Supported parameter.method are \'TSNE\' or \'UMAP\'')
     return yData,signalData,signalIdx,signalAmps
 
 def runEmbeddingSubSampling(projectionDirectory, parameters):
@@ -242,7 +278,10 @@ def runEmbeddingSubSampling(projectionDirectory, parameters):
     numModes = parameters.pcaModes
     numPeriods = parameters.numPeriods
 
-    trainingSetData = np.zeros((numPerDataSet * L, numModes * numPeriods))
+    if parameters.waveletDecomp:
+        trainingSetData = np.zeros((numPerDataSet * L, numModes * numPeriods))
+    else:
+        trainingSetData = np.zeros((numPerDataSet * L, numModes))
     trainingSetAmps = np.zeros((numPerDataSet * L, 1))
     useIdx = np.ones((numPerDataSet * L), dtype='bool')
 
@@ -271,12 +310,27 @@ def subsampled_tsne_from_projections(parameters,results_directory):
     Wrapper function for training set subsampling and mapping.
     """
     projection_directory = results_directory+'/Projections/'
+    if parameters.method == 'TSNE':
+        if parameters.waveletDecomp:
+            tsne_directory= results_directory+'/TSNE/'
+        else:
+            tsne_directory = results_directory + '/TSNE_Projections/'
 
-    tsne_directory= results_directory+'/TSNE/'
+        parameters.tsne_directory = tsne_directory
 
-    parameters.tsne_directory = tsne_directory
+        parameters.tsne_readout = 50
 
-    parameters.tsne_readout = 50
+        tSNE_method_old = parameters.tSNE_method
+        if tSNE_method_old  != 'barnes_hut':
+            print('Setting tsne method to barnes_hut while subsampling for training set (for speedup)...')
+            parameters.tSNE_method = 'barnes_hut'
+
+    elif parameters.method == 'UMAP':
+        tsne_directory = results_directory + '/UMAP/'
+        if not parameters.waveletDecomp:
+            raise ValueError('Wavelet decomposition needed to run UMAP implementation.')
+    else:
+        raise ValueError('Supported parameter.method are \'TSNE\' or \'UMAP\'')
 
     print('Finding Training Set')
     if not os.path.exists(tsne_directory+'training_data.mat'):
@@ -304,12 +358,19 @@ def subsampled_tsne_from_projections(parameters,results_directory):
 
 
     # %% Run t-SNE on training set
+    if parameters.method == 'TSNE':
+        if tSNE_method_old  != 'barnes_hut':
+            print('Setting tsne method back to to %s' % tSNE_method_old)
+            parameters.tSNE_method = tSNE_method_old
+        parameters.tsne_readout = 5
+        print('Finding t-SNE Embedding for Training Set')
 
-    parameters.tsne_readout = 5
-    print('Finding t-SNE Embedding for Training Set')
-
-    trainingEmbedding= run_tSne(trainingSetData,parameters)
-
+        trainingEmbedding= run_tSne(trainingSetData,parameters)
+    elif parameters.method == 'UMAP':
+        print('Finding UMAP Embedding for Training Set')
+        trainingEmbedding = run_UMAP(trainingSetData, parameters)
+    else:
+        raise ValueError('Supported parameter.method are \'TSNE\' or \'UMAP\'')
     hdf5storage.write(data={'trainingEmbedding': trainingEmbedding}, path='/', truncate_existing=True,
                       filename=tsne_directory + '/training_tsne_embedding.mat', store_python_metadata=False,
                       matlab_compatible=True)
@@ -353,7 +414,8 @@ def returnCorrectSigma_sparse(ds, perplexity, tol,maxNeighbors):
 
 
         p = np.exp(-.5*np.square(ds)/sigma**2)
-        p = p/np.sum(p)
+        if np.sum(p) > 0:
+            p = p/np.sum(p)
         idx = p>0
         H = np.sum(-np.multiply(p[idx],np.log(p[idx]))/np.log(2))
         P = 2**H
@@ -388,7 +450,7 @@ def calculateKLCost(x,ydata,ps):
     return out
 
 
-def TDistProjs(i, q, perplexity, sigmaTolerance, maxNeighbors, trainingEmbedding, readout):
+def TDistProjs(i, q, perplexity, sigmaTolerance, maxNeighbors, trainingEmbedding, readout, waveletDecomp):
     if (i+1)%readout == 0:
         t1 = time.time()
         print('\t\t Calculating Sigma Image #%5i'% (i+1))
@@ -413,12 +475,17 @@ def TDistProjs(i, q, perplexity, sigmaTolerance, maxNeighbors, trainingEmbedding
     c = np.zeros((2,))
     flags = np.zeros((2,))
 
+    if waveletDecomp:
+        costfunc = calculateKLCost
+    else:
+        costfunc = calculateKLCost
 
-    b[0,:],c[0],_,_,flags[0] = fmin(calculateKLCost,x0=guesses[0],args=(z,p[idx2]),disp=False,full_output=True,maxiter=100)
-    b[1,:],c[1],_,_,flags[1] = fmin(calculateKLCost,x0=guesses[1],args=(z,p[idx2]),disp=False,full_output=True,maxiter=100)
-
+    b[0, :], c[0], _, _, flags[0] = fmin(costfunc, x0=guesses[0], args=(z, p[idx2]), disp=False,
+                                         full_output=True, maxiter=100)
+    b[1, :], c[1], _, _, flags[1] = fmin(costfunc, x0=guesses[1], args=(z, p[idx2]), disp=False,
+                                         full_output=True, maxiter=100)
     if (i+1)%readout == 0:
-        print('\t\t FminSearch Done Image #%5i %0.02fseconds'%(i+1, time.time()-t1))
+        print('\t\t FminSearch Done Image #%5i %0.02fseconds flags are %s'%(i+1, time.time()-t1, flags))
 
     polyIn = q.find_simplex(b)>=0
 
@@ -469,20 +536,26 @@ def findTDistributedProjections_fmin(data, trainingData, trainingEmbedding, para
         idx = np.arange(batchSize) + j*batchSize
         idx = idx[idx < N]
         currentData = data[idx,:]
-        if np.sum(currentData==0):
-            print('Zeros found in wavelet data at following positions. Will replace then with 1e-12.')
-            currentData[currentData==0] = 1e-12
 
-        print('\t Calculating distances for batch %4i'%(j+1))
-        t1 = time.time()
-        D2,_ = findListKLDivergences(currentData,trainingData)
-        print('\t Calculated distances for batch %4i %0.02fseconds.'%(j+1, time.time()-t1))
+        if parameters.waveletDecomp:
+            if np.sum(currentData==0):
+                print('Zeros found in wavelet data at following positions. Will replace then with 1e-12.')
+                currentData[currentData==0] = 1e-12
 
-        # triter = tqdm(range(len(idx)), )
+            print('\t Calculating distances for batch %4i'%(j+1))
+            t1 = time.time()
+            D2,_ = findListKLDivergences(currentData,trainingData)
+            print('\t Calculated distances for batch %4i %0.02fseconds.'%(j+1, time.time()-t1))
+        else:
+            print('\t Calculating distances for batch %4i' % (j + 1))
+            t1 = time.time()
+            D2 = distance.cdist(currentData, trainingData, metric='sqeuclidean')
+            print('\t Calculated distances for batch %4i %0.02fseconds.' % (j + 1, time.time() - t1))
+
         print('\t Calculating fminProjections for batch %4i' % (j + 1))
         t1 = time.time()
         pool = mp.Pool(numProcessors)
-        outs = pool.starmap(TDistProjs, [(i, D2[i,:], perplexity, sigmaTolerance, maxNeighbors, trainingEmbedding, readout)
+        outs = pool.starmap(TDistProjs, [(i, D2[i,:], perplexity, sigmaTolerance, maxNeighbors, trainingEmbedding, readout, parameters.waveletDecomp)
                             for i in range(len(idx))])
 
         zGuesses[idx,:] = np.concatenate([out[0][:,None] for out in outs], axis=1).T
@@ -515,33 +588,50 @@ def findEmbeddings(projections, trainingData, trainingEmbedding, parameters):
     numModes = parameters.pcaModes
     numPeriods = parameters.numPeriods
 
-
-    print('Finding Wavelets')
-    data, f = mm_findWavelets(projections, numModes, parameters)
-    if parameters.useGPU >= 0:
-        data = data.get()
-
-
-
-    data = data / np.sum(data, 1)[:,None]
-
+    if parameters.waveletDecomp:
+        print('Finding Wavelets')
+        data, f = mm_findWavelets(projections, numModes, parameters)
+        if parameters.useGPU >= 0:
+            data = data.get()
+    else:
+        print('Using projections for tSNE. No wavelet decomposition.')
+        f = 0
+        data = projections
+    data = data / np.sum(data, 1)[:, None]
 
     print('Finding Embeddings')
     t1 = time.time()
-    zValues, zCosts, zGuesses, inConvHull, meanMax, exitFlags = findTDistributedProjections_fmin(data,
-                                                                            trainingData, trainingEmbedding, parameters)
+    if parameters.method == 'TSNE':
+        zValues, zCosts, zGuesses, inConvHull, meanMax, exitFlags = findTDistributedProjections_fmin(data,
+                                                                                trainingData, trainingEmbedding, parameters)
+
+        outputStatistics = edict()
+        outputStatistics.zCosts = zCosts
+        outputStatistics.f = f
+        outputStatistics.numModes = numModes
+        outputStatistics.zGuesses = zGuesses
+        outputStatistics.inConvHull = inConvHull
+        outputStatistics.meanMax = meanMax
+        outputStatistics.exitFlags = exitFlags
+    elif parameters.method == 'UMAP':
+        umapfolder = parameters['taskFolder'] + '/UMAP/'
+        print('\tLoading UMAP Model.')
+        with open(umapfolder + 'umap.model', 'rb') as f:
+            um = pickle.load(f)
+        trainparams = np.load(umapfolder + '_trainMeanScale.npy', allow_pickle=True)
+        print('\tLoaded.')
+        embed_negative_sample_rate = parameters['embed_negative_sample_rate']
+        um.negative_sample_rate = embed_negative_sample_rate
+        zValues = um.transform(data)
+        zValues = zValues - trainparams[0]
+        zValues = zValues * trainparams[1]
+        outputStatistics = edict()
+        outputStatistics.training_mean = trainparams[0]
+        outputStatistics.training_scale = trainparams[1]
+    else:
+        raise ValueError('Supported parameter.method are \'TSNE\' or \'UMAP\'')
     del data
     print('Embeddings found in %0.02f seconds.'%(time.time()-t1))
-
-    outputStatistics = edict()
-    outputStatistics.zCosts = zCosts
-    outputStatistics.f = f
-    outputStatistics.numModes = numModes
-    outputStatistics.zGuesses = zGuesses
-    outputStatistics.inConvHull = inConvHull
-    outputStatistics.meanMax = meanMax
-    outputStatistics.exitFlags = exitFlags
-
 
     return zValues,outputStatistics
 

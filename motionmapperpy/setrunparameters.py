@@ -12,15 +12,19 @@ def setRunParameters(parameters=None):
         parameters = edict()
 
 
-    """"# %%%%%%%% General Parameters %%%%%%%%"""
+    """# %%%%%%%% General Parameters %%%%%%%%"""
 
     # %number of processors to use in parallel code
     numProcessors = 12
 
     useGPU = -1
 
+    method = 'TSNE' # or 'UMAP'
 
-    # %%%%%%%% Wavelet Parameters %%%%%%%%
+
+    """%%%%%%%% Wavelet Parameters %%%%%%%%"""
+    # %Whether to do wavelet decomposition, if False then use normalized projections for tSNE embedding.
+    waveletDecomp = True
 
     # %number of wavelet frequencies to use
     numPeriods = 25
@@ -69,7 +73,27 @@ def setRunParameters(parameters=None):
     # %minimum training set template length
     minTemplateLength = 1
 
+    """%%%%%%%% UMAP Parameters %%%%%%%%"""
+    # Size of local neighborhood for UMAP.
+    n_neighbors = 15
 
+    # Negative sample rate while training.
+    train_negative_sample_rate = 5
+
+    # Negative sample rate while embedding new data.
+    embed_negative_sample_rate = 1
+
+    # Minimum distance between neighbors.
+    min_dist = 0.1
+
+    # UMAP output dimensions.
+    umap_output_dims = 2
+
+    # Number of training epochs.
+    n_training_epochs = 1000
+
+    # Embedding rescaling parameter.
+    rescale_max = 100
 
     """%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%"""
 
@@ -124,5 +148,35 @@ def setRunParameters(parameters=None):
 
     if not 'minTemplateLength' in parameters.keys():
         parameters.minTemplateLength = minTemplateLength
-    
+
+    if not 'waveletDecomp' in parameters.keys():
+        parameters.waveletDecomp = waveletDecomp
+
+    if not 'useGPU' in parameters.keys():
+        parameters.useGPU = useGPU
+
+    if not 'n_neighbors' in parameters.keys():
+        parameters.n_neighbors = n_neighbors
+
+    if not 'train_negative_sample_rate' in parameters.keys():
+        parameters.train_negative_sample_rate = train_negative_sample_rate
+
+    if not 'embed_negative_sample_rate' in parameters.keys():
+        parameters.embed_negative_sample_rate = embed_negative_sample_rate
+
+    if not 'min_dist' in parameters.keys():
+        parameters.min_dist = min_dist
+
+    if not 'umap_output_dims' in parameters.keys():
+        parameters.umap_output_dims = umap_output_dims
+
+    if not 'n_training_epochs' in parameters.keys():
+        parameters.n_training_epochs = n_training_epochs
+
+    if not 'rescale_max' in parameters.keys():
+        parameters.rescale_max = rescale_max
+
+    if not 'method' in parameters.keys():
+        parameters.method = method
+
     return parameters

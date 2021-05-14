@@ -2,7 +2,7 @@ import setuptools
 with open("README.md", "r") as fh:
     long_description = fh.read()
 setuptools.setup(
-    name='motiommapperpy',
+    name='motionmapperpy',
     version='0.1',
     author="Kanishk Jain",
     author_email="kanishkbjain@gmail.com",

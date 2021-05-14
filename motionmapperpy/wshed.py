@@ -64,14 +64,18 @@ def wshedTransform(zValues, min_regions, sigma, tsnefolder, saveplot=True):
 
 
 def velGMM(ampV, parameters, taskFolder, saveplot=True):
-    tsnefolder = taskFolder + '/TSNE/'
+    npoints = min(50000, len(ampV))
+    if parameters.waveletDecomp:
+        tsnefolder = taskFolder + '/TSNE/'
+    else:
+        tsnefolder = taskFolder + '/TSNE_Projections/'
     ampVels = ampV * parameters['samplingFreq']
     vellog10all = np.log10(ampVels[ampVels > 0])
-    vellog10 = np.random.choice(vellog10all, size=50000, replace=False)
+    vellog10 = np.random.choice(vellog10all, size=npoints, replace=False)
 
 
     gm = GaussianMixture(n_components=2, verbose=1, tol=1e-5, max_iter=2000, n_init=1, reg_covar=1e-3)
-    inds = np.random.randint(0, vellog10.shape[0], size=50000)
+    inds = np.random.randint(0, vellog10.shape[0], size=npoints)
     gm = gm.fit(vellog10[inds, None])
     minind = np.argmin(gm.means_.squeeze())
 
@@ -133,7 +137,14 @@ def makeGroupsAndSegments(watershedRegions, zValLens):
 
 def findWatershedRegions(taskfolder, parameters, minimum_regions=150, startsigma=0.1, pThreshold=[0.33, 0.67],saveplot=True, endident = '*_pcaModes.mat'):
     projectionfolder = taskfolder + '/Projections/'
-    tsnefolder = taskfolder + '/TSNE/'
+    if parameters.method == 'TSNE':
+        if parameters.waveletDecomp:
+            tsnefolder = taskfolder + '/TSNE/'
+        else:
+            tsnefolder = taskfolder + '/TSNE_Projections/'
+    elif parameters.method == 'UMAP':
+        tsnefolder = taskfolder+ '/UMAP/'
+
     zValues = []
     projfiles = glob.glob(projectionfolder + '/'+endident)
     t1 = time.time()
@@ -145,8 +156,8 @@ def findWatershedRegions(taskfolder, parameters, minimum_regions=150, startsigma
         fname = projfile.split('/')[-1].split('.')[0]
         zValNames.append(fname)
         print('%i/%i Loading embedding for %s %0.02f seconds.' % (pi + 1, len(projfiles), fname, time.time() - t1))
-
-        with h5py.File(projectionfolder + fname + '_zVals.mat', 'r') as h5file:
+        zValident = 'zVals' if parameters.waveletDecomp else 'zValsProjs'
+        with h5py.File(projectionfolder + fname + '_%s.mat'%zValident, 'r') as h5file:
             zValues.append(h5file['zValues'][:].T)
         ampVels.append(np.concatenate(([0], np.linalg.norm(np.diff(zValues[-1], axis=0), axis=1)), axis=0))
         # with h5py.File(projectionfolder + fname + '_zAmps_vel.mat', 'r') as h5file:
@@ -203,6 +214,6 @@ def findWatershedRegions(taskfolder, parameters, minimum_regions=150, startsigma
                       filename=tsnefolder + 'zVals_wShed_groups.mat', store_python_metadata=False,
                       matlab_compatible=True)
 
-    print('All data saved in %s.'%('TSNE/zVals_wShed_groups.mat'))
+    print('All data saved in %s.'%(tsnefolder.split('/')[-2]+'/zVals_wShed_groups.mat'))
 
 
