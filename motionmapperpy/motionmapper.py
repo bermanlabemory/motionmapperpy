@@ -63,7 +63,7 @@ def run_UMAP(data, parameters, save_model=True):
 
     if save_model:
         print('Saving UMAP model to disk...')
-        np.save(umapfolder+'_trainMeanScale.npy', np.array([trainmean, scale]))
+        np.save(umapfolder+'_trainMeanScale.npy', np.array([trainmean, scale], dtype=object))
         with open(umapfolder+'umap.model', 'wb') as f:
             pickle.dump(um, f)
 

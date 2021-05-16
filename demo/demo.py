@@ -99,7 +99,10 @@ with h5py.File(tsnefolder + 'training_data.mat', 'r') as hfile:
 with h5py.File(tsnefolder+ 'training_embedding.mat', 'r') as hfile:
     trainingEmbedding= hfile['trainingEmbedding'][:].T
 
-zValstr = 'zVals' if parameters.waveletDecomp else 'zValsProjs'
+if parameters.method == 'TSNE':
+    zValstr = 'zVals' if parameters.waveletDecomp else 'zValsProjs'
+else:
+    zValstr = 'uVals'
 for i in range(len(projectionFiles)):
     print('Finding Embeddings')
     print('%i/%i : %s'%(i+1,len(projectionFiles), projectionFiles[i]))

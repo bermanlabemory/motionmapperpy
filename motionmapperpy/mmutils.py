@@ -29,7 +29,7 @@ def gencmap():
 
 
 def createProjectDirectory(pathToProject):
-    _dirs = [pathToProject, '%s/TestProject'%pathToProject, '%s/Projections'%pathToProject,
+    _dirs = [pathToProject, '%s/Projections'%pathToProject,
              '%s/TSNE_Projections'%pathToProject,
              '%s/TSNE'%pathToProject, '%s/UMAP'%pathToProject]
     for d in _dirs:

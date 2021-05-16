@@ -162,7 +162,10 @@ def findWatershedRegions(parameters, minimum_regions=150, startsigma=0.1, pThres
         fname = projfile.split('/')[-1].split('.')[0]
         zValNames.append(fname)
         print('%i/%i Loading embedding for %s %0.02f seconds.' % (pi + 1, len(projfiles), fname, time.time() - t1))
-        zValident = 'zVals' if parameters.waveletDecomp else 'zValsProjs'
+        if parameters.method == 'TSNE':
+            zValident = 'zVals' if parameters.waveletDecomp else 'zValsProjs'
+        else:
+            zValident = 'uVals'
         with h5py.File(projectionfolder + fname + '_%s.mat'%zValident, 'r') as h5file:
             zValues.append(h5file['zValues'][:].T)
         ampVels.append(np.concatenate(([0], np.linalg.norm(np.diff(zValues[-1], axis=0), axis=1)), axis=0))
