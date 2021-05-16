@@ -6,6 +6,7 @@ from scipy.io import loadmat
 import h5py
 import hdf5storage
 import matplotlib.colors
+import os
 
 def gencmap():
     """
@@ -26,6 +27,18 @@ def gencmap():
     colors[42:, 2] = 0.0
     return mpl.colors.ListedColormap(colors)
 
+
+def createProjectDirectory(pathToProject):
+    _dirs = [pathToProject, '%s/TestProject'%pathToProject, '%s/Projections'%pathToProject,
+             '%s/TSNE_Projections'%pathToProject,
+             '%s/TSNE'%pathToProject, '%s/UMAP'%pathToProject]
+    for d in _dirs:
+        if not os.path.exists(d):
+            print('Creating : %s'%d)
+            os.mkdir(d)
+        else:
+            print('Skipping, path already exists : %s'%d)
+    return
 
 def getDensityBounds(density, thresh=1e-6):
     """
@@ -105,5 +118,9 @@ def conV2matV7(matfile):
             print(F)
             return
 
-
-
+def checkParams(parameters):
+    if np.any([p.shape[0]<numPoints  for p in projections]):
+        plens = [p.shape[0] for p in projections]
+        print(plens)
+        print('Training number of points for miniTSNE is greater than # samples in some files. Adjust it to '
+              'smallest # samples : %i'%(np.min(plens)))

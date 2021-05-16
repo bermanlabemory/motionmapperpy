@@ -63,14 +63,15 @@ def wshedTransform(zValues, min_regions, sigma, tsnefolder, saveplot=True):
     return wshed, wbounds, sigma, xx, density
 
 
-def velGMM(ampV, parameters, taskFolder, saveplot=True):
-    npoints = min(50000, len(ampV))
+def velGMM(ampV, parameters, projectPath, saveplot=True):
     if parameters.waveletDecomp:
-        tsnefolder = taskFolder + '/TSNE/'
+        tsnefolder = projectPath + '/TSNE/'
     else:
-        tsnefolder = taskFolder + '/TSNE_Projections/'
+        tsnefolder = projectPath + '/TSNE_Projections/'
     ampVels = ampV * parameters['samplingFreq']
     vellog10all = np.log10(ampVels[ampVels > 0])
+    npoints = min(50000, len(vellog10all))
+
     vellog10 = np.random.choice(vellog10all, size=npoints, replace=False)
 
 
@@ -135,15 +136,20 @@ def makeGroupsAndSegments(watershedRegions, zValLens):
     return groups
 
 
-def findWatershedRegions(taskfolder, parameters, minimum_regions=150, startsigma=0.1, pThreshold=[0.33, 0.67],saveplot=True, endident = '*_pcaModes.mat'):
-    projectionfolder = taskfolder + '/Projections/'
+def findWatershedRegions(parameters, minimum_regions=150, startsigma=0.1, pThreshold=None,saveplot=True, endident = '*_pcaModes.mat'):
+    projectionfolder = parameters.projectPath + '/Projections/'
     if parameters.method == 'TSNE':
         if parameters.waveletDecomp:
-            tsnefolder = taskfolder + '/TSNE/'
+            tsnefolder = parameters.projectPath + '/TSNE/'
         else:
-            tsnefolder = taskfolder + '/TSNE_Projections/'
+            tsnefolder = parameters.projectPath + '/TSNE_Projections/'
     elif parameters.method == 'UMAP':
-        tsnefolder = taskfolder+ '/UMAP/'
+        tsnefolder = parameters.projectPath+ '/UMAP/'
+    else:
+        raise ValueError('parameters.method can only take values \'TSNE\' or \'UMAP\'')
+
+    if pThreshold is None:
+        pThreshold = [0.33, 0.67]
 
     zValues = []
     projfiles = glob.glob(projectionfolder + '/'+endident)
@@ -179,7 +185,7 @@ def findWatershedRegions(taskfolder, parameters, minimum_regions=150, startsigma
     watershedRegions = LL[watershedRegions[:, 1], watershedRegions[:, 0]]
 
     print('Calculating velocity distributions...')
-    ampVels, pRest = velGMM(ampVels, parameters, taskfolder, saveplot=saveplot)
+    ampVels, pRest = velGMM(ampVels, parameters, parameters.projectPath, saveplot=saveplot)
 
     outdict = {'zValues': zValues, 'zValNames': zValNames, 'zValLens': zValLens, 'sigma': sigma, 'xx': xx,
                'density': density, 'LL': LL, 'watershedRegions': watershedRegions, 'v': ampVels, 'pRest': pRest,

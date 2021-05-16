@@ -141,6 +141,6 @@ __pycache__/
 *.py[cod]
 data/TestProject/Projections/*
 data/TestProject/TSNE/*
-data/
+data/TestProject
 
 .DS_Store

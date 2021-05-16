@@ -48,7 +48,7 @@ def run_UMAP(data, parameters, save_model=True):
     if ~np.all(vals == 1):
         data = data / vals[:, None]
 
-    umapfolder = parameters['taskFolder'] + '/UMAP/'
+    umapfolder = parameters['projectPath'] + '/UMAP/'
     n_neighbors, train_negative_sample_rate, min_dist, umap_output_dims, n_training_epochs = parameters['n_neighbors'], \
                                             parameters['train_negative_sample_rate'], parameters['min_dist'], \
                                             parameters['umap_output_dims'], parameters['n_training_epochs']
@@ -215,6 +215,9 @@ def file_embeddingSubSampling(projectionFile, parameters):
             projections = hfile['projections'][:].T
         projections = np.array(projections)
 
+    if projections.shape[0] < numPoints:
+        raise ValueError('Training number of points for miniTSNE is greater than # samples in some files. Please '
+                         'adjust it to %i or lower'%(projections.shape[0]))
 
     N = len(projections)
     numModes = parameters.pcaModes
@@ -277,6 +280,12 @@ def runEmbeddingSubSampling(projectionDirectory, parameters):
     numPerDataSet = round(N / L)
     numModes = parameters.pcaModes
     numPeriods = parameters.numPeriods
+
+    if numPerDataSet > parameters.training_numPoints:
+        raise ValueError("miniTSNE size is %i samples per file which is low for current trainingSetSize which "
+                         "requries %i samples per file. "
+                         "Please decrease trainingSetSize or increase training_numPoints."%
+                         (parameters.training_numPoints, numPerDataSet))
 
     if parameters.waveletDecomp:
         trainingSetData = np.zeros((numPerDataSet * L, numModes * numPeriods))
@@ -372,8 +381,9 @@ def subsampled_tsne_from_projections(parameters,results_directory):
     else:
         raise ValueError('Supported parameter.method are \'TSNE\' or \'UMAP\'')
     hdf5storage.write(data={'trainingEmbedding': trainingEmbedding}, path='/', truncate_existing=True,
-                      filename=tsne_directory + '/training_tsne_embedding.mat', store_python_metadata=False,
+                      filename=tsne_directory + '/training_embedding.mat', store_python_metadata=False,
                       matlab_compatible=True)
+
 
 """Re-Embedding Code"""
 
@@ -614,7 +624,7 @@ def findEmbeddings(projections, trainingData, trainingEmbedding, parameters):
         outputStatistics.meanMax = meanMax
         outputStatistics.exitFlags = exitFlags
     elif parameters.method == 'UMAP':
-        umapfolder = parameters['taskFolder'] + '/UMAP/'
+        umapfolder = parameters['projectPath'] + '/UMAP/'
         print('\tLoading UMAP Model.')
         with open(umapfolder + 'umap.model', 'rb') as f:
             um = pickle.load(f)
