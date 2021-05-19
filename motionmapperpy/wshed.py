@@ -64,10 +64,13 @@ def wshedTransform(zValues, min_regions, sigma, tsnefolder, saveplot=True):
 
 
 def velGMM(ampV, parameters, projectPath, saveplot=True):
-    if parameters.waveletDecomp:
-        tsnefolder = projectPath + '/TSNE/'
+    if parameters.method == 'TSNE':
+        if parameters.waveletDecomp:
+            tsnefolder = projectPath + '/TSNE/'
+        else:
+            tsnefolder = projectPath + '/TSNE_Projections/'
     else:
-        tsnefolder = projectPath + '/TSNE_Projections/'
+        tsnefolder = projectPath+'/UMAP/'
     ampVels = ampV * parameters['samplingFreq']
     vellog10all = np.log10(ampVels[ampVels > 0])
     npoints = min(50000, len(vellog10all))
@@ -187,26 +190,28 @@ def findWatershedRegions(parameters, minimum_regions=150, startsigma=0.1, pThres
     watershedRegions = np.digitize(zValues, xx)
     watershedRegions = LL[watershedRegions[:, 1], watershedRegions[:, 0]]
 
-    print('Calculating velocity distributions...')
-    ampVels, pRest = velGMM(ampVels, parameters, parameters.projectPath, saveplot=saveplot)
+    if parameters.method == 'TSNE':
+        print('Calculating velocity distributions...')
+        ampVels, pRest = velGMM(ampVels, parameters, parameters.projectPath, saveplot=saveplot)
 
-    outdict = {'zValues': zValues, 'zValNames': zValNames, 'zValLens': zValLens, 'sigma': sigma, 'xx': xx,
-               'density': density, 'LL': LL, 'watershedRegions': watershedRegions, 'v': ampVels, 'pRest': pRest,
-               'wbounds': wbounds}
-    hdf5storage.write(data=outdict, path='/', truncate_existing=True,
-                      filename=tsnefolder + 'zVals_wShed_groups.mat', store_python_metadata=False,
-                      matlab_compatible=True)
+        outdict = {'zValues': zValues, 'zValNames': zValNames, 'zValLens': zValLens, 'sigma': sigma, 'xx': xx,
+                   'density': density, 'LL': LL, 'watershedRegions': watershedRegions, 'v': ampVels, 'pRest': pRest,
+                   'wbounds': wbounds}
+        hdf5storage.write(data=outdict, path='/', truncate_existing=True,
+                          filename=tsnefolder + 'zVals_wShed_groups.mat', store_python_metadata=False,
+                          matlab_compatible=True)
 
-    print('\t tempsave done.')
+        print('\t tempsave done.')
 
-    t1 = time.time()
-    print('Adjusting non-stereotypic regions to 0...')
-    bwconn = np.convolve((np.diff(watershedRegions) == 0).astype(bool), np.array([True, True]))
-    pGoodRest = pRest > np.min(pThreshold)
-    badinds = ~np.bitwise_and(bwconn, pGoodRest)
-    watershedRegions[badinds] = 0
-    print('\t Done. %0.02f seconds'%(time.time()-t1))
-
+        t1 = time.time()
+        print('Adjusting non-stereotypic regions to 0...')
+        bwconn = np.convolve((np.diff(watershedRegions) == 0).astype(bool), np.array([True, True]))
+        pGoodRest = pRest > np.min(pThreshold)
+        badinds = ~np.bitwise_and(bwconn, pGoodRest)
+        watershedRegions[badinds] = 0
+        print('\t Done. %0.02f seconds'%(time.time()-t1))
+    else:
+        pRest = 1.0
     outdict = {'zValues':zValues, 'zValNames':zValNames, 'zValLens':zValLens, 'sigma':sigma, 'xx':xx,
                'density':density, 'LL':LL, 'watershedRegions':watershedRegions, 'v':ampVels, 'pRest':pRest,
                'wbounds':wbounds}
