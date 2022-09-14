@@ -69,7 +69,7 @@ def run_UMAP(data, parameters, save_model=True):
 
     return y
 
-def run_tSne(data, parameters=None):
+def run_tSne(data, parameters):
     """
     run_tSne runs the t-SNE algorithm on an array of normalized wavelet amplitudes
     :param data: Nxd array of wavelet amplitudes (will normalize if unnormalized) containing N data points
@@ -77,7 +77,7 @@ def run_tSne(data, parameters=None):
     :return:
             yData -> N x 2 array of embedding results
     """
-    parameters = setRunParameters(parameters)
+    # parameters = setRunParameters(parameters) parameters are set before calling this function
 
     vals = np.sum(data, 1)
     if ~np.all(vals == 1):
@@ -272,7 +272,7 @@ def runEmbeddingSubSampling(projectionDirectory, parameters):
         trainingSetAmps -> Nx1 array of training set wavelet amplitudes
         projectionFiles -> list of files in 'projectionDirectory'
     """
-    parameters = setRunParameters(parameters)
+    #parameters = setRunParameters(parameters) parameters are delivered as input
     projectionFiles = glob.glob(projectionDirectory+'/*pcaModes.mat')
     
     N = parameters.trainingSetSize

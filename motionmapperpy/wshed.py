@@ -156,6 +156,7 @@ def findWatershedRegions(parameters, minimum_regions=150, startsigma=0.1, pThres
 
     zValues = []
     projfiles = glob.glob(projectionfolder + '/'+endident)
+    projfiles.sort() # sorted projectfiles to retrieve clusters in the same order as the original data
     t1 = time.time()
 
     zValNames = []
