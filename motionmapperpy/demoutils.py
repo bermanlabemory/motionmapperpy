@@ -8,80 +8,30 @@ from moviepy.video.io.bindings import mplfig_to_npimage
 import hdf5storage
 from .wshed import makeGroupsAndSegments
 
-def makeregionvideo_flies(region, parameters, wshedfile, clips):
-    animfps = 50.0
-    subs = 2
-    submaxframes = 500
+def egoh5(h5, bindcenter=8, align=True, b1=2, b2=11, silent=False):
+    """
+    Return h5 in the center of frame of body part index. If align is true, rotate data so that vector from b2 to b1
+    always points East.
+    """
 
-    groups = makeGroupsAndSegments(wshedfile['watershedRegions'][0], wshedfile['zValLens'][0])
-    nregs = len(groups)
+    ginds = np.setdiff1d(np.arange(h5.shape[1]), bindcenter)
+    egoh5 = h5[:, :, :2] - h5[:, [bindcenter for i in range(h5.shape[1])], :2]
+    egoh5 = egoh5[:, ginds]
+    if not align:
+        return egoh5
+    dir_arr = egoh5[:, b1] - egoh5[:, b2 - 1]
+    dir_arr = dir_arr / np.linalg.norm(dir_arr, axis=1)[:, np.newaxis]
+    if not silent:
+        for t in tqdm(range(egoh5.shape[0])):
+            rot_mat = np.array([[dir_arr[t, 0], dir_arr[t, 1]], [-dir_arr[t, 1], dir_arr[t, 0]]])
+            egoh5[t] = np.array(np.dot(egoh5[t], rot_mat.T))
+    elif silent:
+        for t in range(egoh5.shape[0]):
+            rot_mat = np.array([[dir_arr[t, 0], dir_arr[t, 1]], [-dir_arr[t, 1], dir_arr[t, 0]]])
+            egoh5[t] = np.array(np.dot(egoh5[t], rot_mat.T))
+    return egoh5
 
-    region = region - 1
 
-    outputdir = '%s/%s/region_vidoes_%i/' % (parameters.projectPath, parameters.method, nregs)
-    if not os.path.exists(outputdir):
-        os.mkdir(outputdir)
-    groups = groups - 1
-    print('[Region %i] Starting' % (region + 1))
-
-    if os.path.isfile(outputdir + 'regions_' + '%.3i' % (region + 1) + '.mp4'):
-        print('[Region %i] Already present. ' % (region + 1))
-        return
-
-    tqdm._instances.clear()
-
-    if not groups[region][0].shape[0] or groups[region][0].shape[0] == 1:
-        print('[Region %i] No frames in groups.' % (region + 1))
-        return
-
-    nframes = np.atleast_1d(np.diff(groups[region][0][:, 1:], axis=1).squeeze())
-    if np.sum(nframes < submaxframes) == 0:
-        print('[Region %i] All frames sequences more than length %i.' %
-              (region + 1, submaxframes))
-        return
-
-    nplots = min(subs * subs, np.sum(nframes < submaxframes))
-    longinds = np.where(nframes < submaxframes)[0]
-    selectedclips = longinds[np.argsort(nframes[longinds])[::-1]][:nplots]
-
-    vidindslist = groups[region][0][selectedclips, 0]
-    framestoplot = np.array([np.arange(groups[region][0][i, 1], groups[region][0][i, 2]) for i in selectedclips])
-    maxsize = max([i.shape[0] for i in framestoplot])
-
-    print('[Region %i] Making region video...' % (region + 1))
-
-    subx = max(2, int(np.ceil(np.sqrt(nplots))))
-    fig, axes = plt.subplots(subx, subx, figsize=(12, 12))
-    fig.subplots_adjust(0, 0, 1.0, 1.0, 0.0, 0.0)
-
-    def make_frame(t):
-        j_ = int(t * animfps)
-        for i in range(subx * subx):
-
-            ax = axes[i // subx, i % subx]
-            ax.clear()
-            ax.axis('off')
-            if i >= nplots:
-                continue
-            j = j_ % len(framestoplot[i])
-            clip = clips[vidindslist[i]]
-            ax.imshow(clip.get_frame(framestoplot[i][j] / clip.fps),
-                      cmap='Greys_r', origin='lower')
-        return mplfig_to_npimage(fig)
-
-    try:
-        tqdm._instances.clear()
-    except:
-        pass
-
-    t1 = time.time()
-    animation = VideoClip(make_frame, duration=maxsize / animfps)
-
-    animation.write_videofile(outputdir + 'regions_' + '%.3i' % (region + 1) + '.mp4', fps=animfps, audio=False,
-                              threads=1)
-
-    print('[Region %i] %i seconds, Saved at %s' % (
-    region + 1, time.time() - t1, outputdir + 'regions_' + '%.3i' % (region + 1) + '.mp4'))
 
 
 def getTransitions(wregs):
@@ -214,14 +164,19 @@ def plotLaggedEigenvalues(transitions, lags=None, numModes=5):
               ['i = %i' % i for i in range(numModes)])
     return fig, axes, outputStruct
 
-def makeregionvideos_mice(taskfolder, h5s, clips, dsetnames, minLength=10, maxlength=90):
+def makeregionvideos_mice(parameters, h5s, clips, dsetnames, minLength=10, maxlength=90):
     animfps = 30.0
     subs = 5
     pad = 100
 
     print('Loading .mat file with groups.')
-    wshedfile = hdf5storage.loadmat(taskfolder + '/TSNE/zVals_wShed_groups.mat')
+    wshedfile = hdf5storage.loadmat(parameters.projectPath + '/%s/zVals_wShed_groups.mat'%parameters.method)
     groups = wshedfile['groups'] - 1
+
+    indcheck = [np.argwhere(np.array(dsetnames)==wzname[0][0].split('_pcaModes')[0])[0][0] for wzname in wshedfile['zValNames'][0]]
+    h5s = [h5s[i] for i in indcheck]
+    clips = [clips[i] for i in indcheck]
+    dsetnames = [dsetnames[i] for i in indcheck]
 
     for h5, l in zip(h5s, wshedfile['zValLens'][0]):
         assert (h5.shape[0] == l)
@@ -233,7 +188,7 @@ def makeregionvideos_mice(taskfolder, h5s, clips, dsetnames, minLength=10, maxle
     connections = [[0, 4, 7, 10, 13], [0, 3, 6, 9, 12, 13], [0, 5, 8, 11, 13], [1, 2, 3], [4, 5, 6], [7, 8, 9],
                    [10, 11, 12]]
     wshedregs = np.max(wshedfile['watershedRegions'])
-    outputdir = taskfolder + '/TSNE/RegionVids%i/' % wshedregs
+    outputdir = parameters.projectPath + '/%s/RegionVids%i/' % (parameters.method, wshedregs)
     try:
         os.mkdir(outputdir)
     except:
@@ -338,3 +293,78 @@ def makeregionvideos_mice(taskfolder, h5s, clips, dsetnames, minLength=10, maxle
                                   threads=1)
         print('Video saved at %s.' % outfile)
         plt.close()
+
+def makeregionvideo_flies(region, parameters, wshedfile, clips):
+    animfps = 50.0
+    subs = 2
+    submaxframes = 500
+
+    groups = makeGroupsAndSegments(wshedfile['watershedRegions'][0], wshedfile['zValLens'][0])
+    nregs = len(groups)
+
+    region = region - 1
+
+    outputdir = '%s/%s/region_vidoes_%i/' % (parameters.projectPath, parameters.method, nregs)
+    if not os.path.exists(outputdir):
+        os.mkdir(outputdir)
+    groups = groups - 1
+    print('[Region %i] Starting' % (region + 1))
+
+    if os.path.isfile(outputdir + 'regions_' + '%.3i' % (region + 1) + '.mp4'):
+        print('[Region %i] Already present. ' % (region + 1))
+        return
+
+    tqdm._instances.clear()
+
+    if not groups[region][0].shape[0] or groups[region][0].shape[0] == 1:
+        print('[Region %i] No frames in groups.' % (region + 1))
+        return
+
+    nframes = np.atleast_1d(np.diff(groups[region][0][:, 1:], axis=1).squeeze())
+    if np.sum(nframes < submaxframes) == 0:
+        print('[Region %i] All frames sequences more than length %i.' %
+              (region + 1, submaxframes))
+        return
+
+    nplots = min(subs * subs, np.sum(nframes < submaxframes))
+    longinds = np.where(nframes < submaxframes)[0]
+    selectedclips = longinds[np.argsort(nframes[longinds])[::-1]][:nplots]
+
+    vidindslist = groups[region][0][selectedclips, 0]
+    framestoplot = np.array([np.arange(groups[region][0][i, 1], groups[region][0][i, 2]) for i in selectedclips])
+    maxsize = max([i.shape[0] for i in framestoplot])
+
+    print('[Region %i] Making region video...' % (region + 1))
+
+    subx = max(2, int(np.ceil(np.sqrt(nplots))))
+    fig, axes = plt.subplots(subx, subx, figsize=(12, 12))
+    fig.subplots_adjust(0, 0, 1.0, 1.0, 0.0, 0.0)
+
+    def make_frame(t):
+        j_ = int(t * animfps)
+        for i in range(subx * subx):
+
+            ax = axes[i // subx, i % subx]
+            ax.clear()
+            ax.axis('off')
+            if i >= nplots:
+                continue
+            j = j_ % len(framestoplot[i])
+            clip = clips[vidindslist[i]]
+            ax.imshow(clip.get_frame(framestoplot[i][j] / clip.fps),
+                      cmap='Greys_r', origin='lower')
+        return mplfig_to_npimage(fig)
+
+    try:
+        tqdm._instances.clear()
+    except:
+        pass
+
+    t1 = time.time()
+    animation = VideoClip(make_frame, duration=maxsize / animfps)
+
+    animation.write_videofile(outputdir + 'regions_' + '%.3i' % (region + 1) + '.mp4', fps=animfps, audio=False,
+                              threads=1)
+
+    print('[Region %i] %i seconds, Saved at %s' % (
+    region + 1, time.time() - t1, outputdir + 'regions_' + '%.3i' % (region + 1) + '.mp4'))
