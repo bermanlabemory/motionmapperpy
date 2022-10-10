@@ -41,9 +41,11 @@ def getTransitions(wregs):
 
 def makeTransitionMatrix(states, lag):
     # states = np.flatten(states)
+    states = states[states>0]
     a = np.unique(states)
 
-    a = np.unique(states)
+    a = np.unique(states).tolist()
+    a = a + [a[-1]+1]
     F = np.histogram2d(states[:-lag], states[lag:], bins=[a, a])
     sums = np.sum(F[0], axis=1)
     sums[sums == 0] = 1
