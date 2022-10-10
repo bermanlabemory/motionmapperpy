@@ -118,8 +118,8 @@ def conV2matV7(matfile):
             print(F)
             return
 
-def checkParams(parameters):
-    if np.any([p.shape[0]<numPoints  for p in projections]):
+def checkParams(parameters, projections):
+    if np.any([p.shape[0]<parameters.numPoints  for p in projections]):
         plens = [p.shape[0] for p in projections]
         print(plens)
         print('Training number of points for miniTSNE is greater than # samples in some files. Adjust it to '

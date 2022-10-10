@@ -5,6 +5,7 @@ import hdf5storage
 import time
 from skimage.segmentation import watershed
 from skimage.filters import roberts
+
 from sklearn.mixture import GaussianMixture
 import matplotlib.pyplot as plt
 from .mmutils import *
@@ -27,13 +28,13 @@ def wshedTransform(zValues, min_regions, sigma, tsnefolder, saveplot=True):
 
     while numRegs > min_regions:
         sigma += 0.05
-        _, xx, density = findPointDensity(zValues, sigma, 610,
+        _, xx, density = findPointDensity(zValues, sigma, 611,
                                                   rangeVals=[-np.abs(zValues).max() - 15, np.abs(zValues).max() + 15])
         wshed = watershed(-density, connectivity=10)
         wshed[density < 1e-5] = 0
 
         numRegs = len(np.unique(wshed)) - 1
-        print('\t Sigma %0.2f, Regions %i' % (sigma, numRegs), )
+        print('\t Sigma %0.2f, Regions %i' % (sigma, numRegs), end='\r')
     for i, wreg in enumerate(np.unique(wshed)):
         wshed[wshed == wreg] = i
     wbounds = np.where(roberts(wshed).astype('bool'))
@@ -98,8 +99,8 @@ def velGMM(ampV, parameters, projectPath, saveplot=True):
             ax.plot(bins, getPDF(bins, mu, sigma, p), label='Component %i' % compno, color=c, alpha=0.5)
 
         ax.plot(bins, gm.predict_proba(bins[:, None])[:, minind], label='pRest')
-        ax.axvline(bins[np.where(gm.predict_proba(bins[:, None])[:, minind] < 0.33)[0][0]], color='firebrick',
-                   label='pRest=0.33')
+        ax.axvline(bins[np.where(gm.predict_proba(bins[:, None])[:, minind] < np.min(parameters.pThreshold))[0][0]], color='firebrick',
+                   label='pRest=%0.2f'%np.min(parameters.pThreshold))
         ax.legend()
         ax.set_xlabel(r'$log_{10}$ Velocity')
         ax.set_ylabel('PDF')
@@ -114,8 +115,7 @@ def velGMM(ampV, parameters, projectPath, saveplot=True):
     return ampV, pRest
 
 
-def makeGroupsAndSegments(watershedRegions, zValLens):
-    min_length = 60
+def makeGroupsAndSegments(watershedRegions, zValLens, min_length=60):
 
     inds = np.zeros_like(watershedRegions)
     start = 0
@@ -132,6 +132,8 @@ def makeGroupsAndSegments(watershedRegions, zValLens):
     groups = [np.empty((0, 3), dtype=int)] * watershedRegions.max()
 
     for wreg, tind, vind in zip(wregs, inds, vinds):
+        if wreg == 0:
+            continue
         if np.all(vind == vind[0]):
             groups[wreg - 1] = np.concatenate(
                 [groups[wreg - 1], np.array([vind[0], tind[0] + 1, tind[-1] + 1])[None, :]])
@@ -139,7 +141,8 @@ def makeGroupsAndSegments(watershedRegions, zValLens):
     return groups
 
 
-def findWatershedRegions(parameters, minimum_regions=150, startsigma=0.1, pThreshold=None,saveplot=True, endident = '*_pcaModes.mat'):
+def findWatershedRegions(parameters, minimum_regions=150, startsigma=0.1, pThreshold=None,saveplot=True, endident = '*_pcaModes.mat',
+                         min_length_videos=10):
     projectionfolder = parameters.projectPath + '/Projections/'
     if parameters.method == 'TSNE':
         if parameters.waveletDecomp:
@@ -152,7 +155,9 @@ def findWatershedRegions(parameters, minimum_regions=150, startsigma=0.1, pThres
         raise ValueError('parameters.method can only take values \'TSNE\' or \'UMAP\'')
 
     if pThreshold is None:
-        pThreshold = [0.33, 0.67]
+        parameters.pThreshold = [0.33, 0.67]
+    else:
+        parameters.pThreshold = pThreshold
 
     zValues = []
     projfiles = glob.glob(projectionfolder + '/'+endident)
@@ -206,7 +211,7 @@ def findWatershedRegions(parameters, minimum_regions=150, startsigma=0.1, pThres
         t1 = time.time()
         print('Adjusting non-stereotypic regions to 0...')
         bwconn = np.convolve((np.diff(watershedRegions) == 0).astype(bool), np.array([True, True]))
-        pGoodRest = pRest > np.min(pThreshold)
+        pGoodRest = pRest > np.min(parameters.pThreshold)
         badinds = ~np.bitwise_and(bwconn, pGoodRest)
         watershedRegions[badinds] = 0
         print('\t Done. %0.02f seconds'%(time.time()-t1))
@@ -220,9 +225,9 @@ def findWatershedRegions(parameters, minimum_regions=150, startsigma=0.1, pThres
                           matlab_compatible=True)
     print('\t tempsave done.')
 
-    groups = makeGroupsAndSegments(watershedRegions, zValLens)
+    groups = makeGroupsAndSegments(watershedRegions, zValLens, min_length=min_length_videos)
     outdict = {'zValues': zValues, 'zValNames': zValNames, 'zValLens': zValLens, 'sigma': sigma, 'xx': xx,
-               'density': density, 'LL': LL, 'watershedRegions': watershedRegions, 'v': ampVels, #'pRest': pRest,
+               'density': density, 'LL': LL, 'watershedRegions': watershedRegions, 'v': ampVels, 'pRest': pRest,
                'wbounds': wbounds, 'groups': groups}
     hdf5storage.write(data=outdict, path='/', truncate_existing=True,
                       filename=tsnefolder + 'zVals_wShed_groups.mat', store_python_metadata=False,
