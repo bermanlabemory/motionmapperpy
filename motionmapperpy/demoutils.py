@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from moviepy.editor import VideoClip
 from moviepy.video.io.bindings import mplfig_to_npimage
 import hdf5storage
-from .mmutils import makeGroupsAndSegments
+from .wshed import makeGroupsAndSegments
 
 def makeregionvideo_flies(region, parameters, wshedfile, clips):
     animfps = 50.0
