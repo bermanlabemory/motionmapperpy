@@ -166,9 +166,8 @@ def plotLaggedEigenvalues(transitions, lags=None, numModes=5):
               ['i = %i' % i for i in range(numModes)])
     return fig, axes, outputStruct
 
-def makeregionvideos_mice(parameters, h5s, clips, dsetnames, minLength=10, maxlength=90):
+def makeregionvideos_mice(parameters, h5s, clips, dsetnames, minLength=10, maxlength=90, subs=2):
     animfps = 30.0
-    subs = 5
     pad = 100
 
     print('Loading .mat file with groups.')
@@ -296,12 +295,149 @@ def makeregionvideos_mice(parameters, h5s, clips, dsetnames, minLength=10, maxle
         print('Video saved at %s.' % outfile)
         plt.close()
 
-def makeregionvideo_flies(region, parameters, wshedfile, clips):
+
+def makeregionvideo_mice(region, parameters, h5s, clips, dsetnames, minLength=10, maxLength=90, subs=2):
+    wshedfile = hdf5storage.loadmat(parameters.projectPath + '/%s/zVals_wShed_groups.mat'%parameters.method)
+
+    wshedregs = np.max(wshedfile['watershedRegions'])
+
+    outputdir = parameters.projectPath + '/%s/RegionVids%i/' % (parameters.method, wshedregs)
+    outfile = outputdir + 'regions_' + '%.3i' % (region + 1) + '.mp4'
+    if os.path.exists(outfile):
+        print('Video %s already exists. Skipping.' % outfile)
+        return
+
+    animfps = 30.0
+    pad = 100
+
+    print('Loading .mat file with groups.')
+    groups = wshedfile['groups'] - 1
+
+    indcheck = [np.argwhere(np.array(dsetnames)==wzname[0][0].split('_pcaModes')[0])[0][0] for wzname in wshedfile['zValNames'][0]]
+    h5s = [h5s[i] for i in indcheck]
+    clips = [clips[i] for i in indcheck]
+    dsetnames = [dsetnames[i] for i in indcheck]
+
+    for h5, l in zip(h5s, wshedfile['zValLens'][0]):
+        assert (h5.shape[0] == l)
+
+    for wzname, dname in zip(wshedfile['zValNames'][0], dsetnames):
+        print(wzname[0][0].split('_pcaModes')[0], dname)
+        print('the above pairs should match')
+
+    connections = [[0, 4, 7, 10, 13], [0, 3, 6, 9, 12, 13], [0, 5, 8, 11, 13], [1, 2, 3], [4, 5, 6], [7, 8, 9],
+                   [10, 11, 12]]
+    try:
+        os.mkdir(outputdir)
+    except:
+        pass
+
+    outfile = outputdir + 'regions_' + '%.3i' % (region + 1) + '.mp4'
+    if os.path.exists(outfile):
+        print('Video %s already exists. Skipping.' % outfile)
+        return
+    else:
+        print('Making video at %s.' % outfile)
+    try:
+        tqdm._instances.clear()
+    except:
+        pass
+    if not groups[region][0].shape[0] or groups[region][0].shape[0] == 1:
+        print('Region %i has no videos.' % (region))
+        return
+    nframes = np.atleast_1d(np.diff(groups[region][0][:, 1:], axis=1).squeeze())
+    nplots = min(subs * subs, np.sum((nframes < maxLength) & (nframes > minLength)))
+    longinds = np.where((nframes < maxLength) & (nframes > minLength))[0]
+    if not longinds.shape[0]:
+        print('No videos for region %i' % (region + 1))
+        return
+    # nplots = min(subs * subs, np.sum(nframes<600))
+    # if not nplots:
+    #     print('Shortest video segments is %i frames long. Skipping to next.'%np.min(nframes))
+    #     continue
+    # longinds = np.where(nframes<600)[0]
+
+    selectedclips = longinds[np.argsort(nframes[longinds])[::-1]][:nplots]
+
+    vidindslist = groups[region][0][selectedclips, 0]
+    framestoplot = np.array([np.arange(groups[region][0][i, 1], groups[region][0][i, 2]) for i in selectedclips])
+    maxsize = max([i.shape[0] for i in framestoplot])
+
+    print(region + 1, ' starting')
+
+    dnames = [dsetnames[0][v].split('/')[-1].split('.')[0].split('session')[0][:-1] for v in vidindslist]
+    framestoplot = framestoplot[np.argsort(dnames)]
+    vidindslist = vidindslist[np.argsort(dnames)]
+    dnames = [dnames[i] for i in np.argsort(dnames)]
+
+    frames = []
+
+    print('Reading maximum %i frames from %i videos' % (maxsize, nplots))
+    print([(f, i.shape[0]) for i, f in zip(framestoplot, vidindslist)])
+    for i, v in tqdm(enumerate(vidindslist)):
+        fr = np.zeros((len(framestoplot[i]), 2 * pad, 2 * pad))
+        for j, f in enumerate(framestoplot[i]):
+            frame_region = clips[v].get_frame(f / clips[v].fps)[:, :, 0]
+            xmin = np.round(h5s[v][f, 8, 0]).astype('int') - pad
+            ymin = np.round(h5s[v][f, 8, 1]).astype('int') - pad
+            ymax = ymin + 2 * pad
+            xmax = xmin + 2 * pad
+
+            if xmin < 0 or ymin < 0 or xmax > frame_region.shape[1] - 1 or ymax > frame_region.shape[0] - 1:
+                if xmax > frame_region.shape[1] - 1 + pad or ymax > frame_region.shape[0] - 1 + pad:
+                    excess = max(frame_region.shape[1] - 1 + pad - xmax, frame_region.shape[0] - 1 + pad - ymax)
+                    frame_region = np.pad(frame_region,
+                                          ((pad + excess, pad + excess), (pad + excess, pad + excess)), 'minimum')
+                else:
+                    frame_region = np.pad(frame_region, ((pad, pad), (pad, pad)), 'minimum')
+                frame_region = frame_region[ymin + pad:ymax + pad, xmin + pad:xmax + pad]
+
+            else:
+                frame_region = frame_region[ymin:ymax, xmin:xmax]
+            fr[j, :, :] = frame_region
+        frames.append(fr)
+    frames = np.array(frames)
+    subx = max(2, int(np.ceil(np.sqrt(nplots))))
+    fig, axes = plt.subplots(subx, subx, figsize=(12, 12))
+    fig.subplots_adjust(0, 0, 1.0, 1.0, 0.0, 0.0)
+
+    def make_frame(t):
+        j_ = int(t * animfps)
+        for i in range(subx * subx):
+
+            ax = axes[i // subx, i % subx]
+            ax.clear()
+            ax.axis('off')
+            if i >= nplots:
+                continue
+
+            j = j_ % len(framestoplot[i])
+            xmin = np.round(h5s[vidindslist[i]][framestoplot[i][j], 8, 0]).astype('int') - pad
+            ymin = np.round(h5s[vidindslist[i]][framestoplot[i][j], 8, 1]).astype('int') - pad
+            ax.imshow(frames[i][j], cmap='Greys_r')
+            for conn in connections:
+                ax.plot(h5s[vidindslist[i]][framestoplot[i][j], conn, 0] - (xmin),
+                        h5s[vidindslist[i]][framestoplot[i][j], conn, 1] - (ymin))
+
+            # ax.text(50, 20, dnames[i], color='red', fontsize=14)
+        return mplfig_to_npimage(fig)
+
+    try:
+        tqdm._instances.clear()
+    except:
+        pass
+    animation = VideoClip(make_frame, duration=maxsize / animfps)
+    animation.write_videofile(outfile, fps=animfps, audio=False,
+                              threads=1)
+    print('Video saved at %s.' % outfile)
+    plt.close()
+
+def makeregionvideo_flies(region, parameters, wshedfile, clips, subs = 2, minLength=10, maxLength=100):
     animfps = 50.0
-    subs = 2
     submaxframes = 500
 
-    groups = makeGroupsAndSegments(wshedfile['watershedRegions'][0], wshedfile['zValLens'][0])
+    groups = makeGroupsAndSegments(wshedfile['watershedRegions'][0], wshedfile['zValLens'][0],
+                                   min_length=minLength, max_length=maxLength)
     nregs = len(groups)
 
     region = region - 1

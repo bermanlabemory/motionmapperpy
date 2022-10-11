@@ -115,7 +115,7 @@ def velGMM(ampV, parameters, projectPath, saveplot=True):
     return ampV, pRest
 
 
-def makeGroupsAndSegments(watershedRegions, zValLens, min_length=60):
+def makeGroupsAndSegments(watershedRegions, zValLens, min_length=10, max_length=100):
 
     inds = np.zeros_like(watershedRegions)
     start = 0
@@ -125,10 +125,10 @@ def makeGroupsAndSegments(watershedRegions, zValLens, min_length=60):
     vinds = np.digitize(np.arange(watershedRegions.shape[0]), bins=np.concatenate([[0], np.cumsum(zValLens)]))
 
     splitinds = np.where(np.diff(watershedRegions, axis=0) != 0)[0] + 1
-    inds = [i for i in np.split(inds, splitinds) if len(i) > min_length]
-    wregs = [i[0] for i in np.split(watershedRegions, splitinds) if len(i) > min_length]
+    inds = [i for i in np.split(inds, splitinds) if len(i) > min_length and len(i) < max_length]
+    wregs = [i[0] for i in np.split(watershedRegions, splitinds) if len(i) > min_length and len(i) < max_length]
 
-    vinds = [i for i in np.split(vinds, splitinds) if len(i) > min_length]
+    vinds = [i for i in np.split(vinds, splitinds) if len(i) > min_length and len(i) < max_length]
     groups = [np.empty((0, 3), dtype=int)] * watershedRegions.max()
 
     for wreg, tind, vind in zip(wregs, inds, vinds):
