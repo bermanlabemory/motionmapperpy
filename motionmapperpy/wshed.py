@@ -137,7 +137,7 @@ def makeGroupsAndSegments(watershedRegions, zValLens, min_length=10, max_length=
         if np.all(vind == vind[0]):
             groups[wreg - 1] = np.concatenate(
                 [groups[wreg - 1], np.array([vind[0], tind[0] + 1, tind[-1] + 1])[None, :]])
-    groups = np.array([[g] for g in groups])
+    groups = np.array([[g] for g in groups], dtype=object)
     return groups
 
 
