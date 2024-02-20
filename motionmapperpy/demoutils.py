@@ -223,7 +223,7 @@ def makeregionvideos_mice(parameters, h5s, clips, dsetnames, minLength=10, maxle
         selectedclips = longinds[np.argsort(nframes[longinds])[::-1]][:nplots]
 
         vidindslist = groups[region][0][selectedclips, 0]
-        framestoplot = np.array([np.arange(groups[region][0][i, 1], groups[region][0][i, 2]) for i in selectedclips])
+        framestoplot = np.array([np.arange(groups[region][0][i, 1], groups[region][0][i, 2]) for i in selectedclips], dtype=object)
         maxsize = max([i.shape[0] for i in framestoplot])
 
         print(region + 1, ' starting')
@@ -360,7 +360,7 @@ def makeregionvideo_mice(region, parameters, h5s, clips, dsetnames, minLength=10
     selectedclips = longinds[np.argsort(nframes[longinds])[::-1]][:nplots]
 
     vidindslist = groups[region][0][selectedclips, 0]
-    framestoplot = np.array([np.arange(groups[region][0][i, 1], groups[region][0][i, 2]) for i in selectedclips])
+    framestoplot = np.array([np.arange(groups[region][0][i, 1], groups[region][0][i, 2]) for i in selectedclips], dtype=object)
     maxsize = max([i.shape[0] for i in framestoplot])
 
     print(region + 1, ' starting')
@@ -469,7 +469,7 @@ def makeregionvideo_flies(region, parameters, wshedfile, clips, subs = 2, minLen
     selectedclips = longinds[np.argsort(nframes[longinds])[::-1]][:nplots]
 
     vidindslist = groups[region][0][selectedclips, 0]
-    framestoplot = np.array([np.arange(groups[region][0][i, 1], groups[region][0][i, 2]) for i in selectedclips])
+    framestoplot = np.array([np.arange(groups[region][0][i, 1], groups[region][0][i, 2]) for i in selectedclips], dtype=object)
     maxsize = max([i.shape[0] for i in framestoplot])
 
     print('[Region %i] Making region video...' % (region + 1))
