@@ -259,7 +259,7 @@ def makeregionvideos_mice(parameters, h5s, clips, dsetnames, minLength=10, maxle
                     frame_region = frame_region[ymin:ymax, xmin:xmax]
                 fr[j, :, :] = frame_region
             frames.append(fr)
-        frames = np.array(frames)
+        frames = np.array(frames, dtype=object)
         subx = max(2, int(np.ceil(np.sqrt(nplots))))
         fig, axes = plt.subplots(subx, subx, figsize=(12, 12))
         fig.subplots_adjust(0, 0, 1.0, 1.0, 0.0, 0.0)
@@ -396,7 +396,7 @@ def makeregionvideo_mice(region, parameters, h5s, clips, dsetnames, minLength=10
                 frame_region = frame_region[ymin:ymax, xmin:xmax]
             fr[j, :, :] = frame_region
         frames.append(fr)
-    frames = np.array(frames)
+    frames = np.array(frames, dtype=object)
     subx = max(2, int(np.ceil(np.sqrt(nplots))))
     fig, axes = plt.subplots(subx, subx, figsize=(12, 12))
     fig.subplots_adjust(0, 0, 1.0, 1.0, 0.0, 0.0)
