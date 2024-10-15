@@ -144,3 +144,4 @@ data/TestProject/TSNE/*
 data/TestProject
 
 .DS_Store
+MUJOCO_LOG.TXT
