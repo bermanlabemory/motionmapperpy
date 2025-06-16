@@ -91,7 +91,7 @@ def run_tSne(data, parameters=None):
 
         print('Computing t-SNE with %s method'%parameters.tSNE_method)
         tsne = TSNE(perplexity=parameters.perplexity, metric='precomputed', verbose=1, n_jobs=-1,
-                    method=parameters.tSNE_method)
+                    method=parameters.tSNE_method, init='random')
         yData = tsne.fit_transform(D)
     else:
         tsne = TSNE(perplexity=parameters.perplexity, metric='euclidean', verbose=1, n_jobs=-1,
