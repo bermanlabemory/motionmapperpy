@@ -2,7 +2,10 @@ import os, time, glob, shutil
 import multiprocessing as mp
 
 import matplotlib
-matplotlib.use('Agg')
+# NOTE: we intentionally do NOT force a non-interactive backend at import time. Doing so
+# (matplotlib.use('Agg')) used to silently break inline plotting in notebooks that imported
+# motionmapperpy. The few functions here that *save* figures switch to 'Agg' locally and restore
+# the active backend afterwards (see findTemplatesFromData; wshed.py does the same).
 
 import numpy as np
 from scipy.io import savemat, loadmat
@@ -45,7 +48,7 @@ def run_UMAP(data, parameters, save_model=True):
         raise ValueError('UMAP not implemented without wavelet decomposition.')
 
     vals = np.sum(data, 1)
-    if ~np.all(vals == 1):
+    if not np.all(vals == 1):
         data = data / vals[:, None]
 
     umapfolder = parameters['projectPath'] + '/UMAP/'
@@ -80,7 +83,7 @@ def run_tSne(data, parameters=None):
     parameters = setRunParameters(parameters)
 
     vals = np.sum(data, 1)
-    if ~np.all(vals == 1):
+    if not np.all(vals == 1):
         data = data / vals[:, None]
 
     if parameters.waveletDecomp:
@@ -149,6 +152,8 @@ def findTemplatesFromData(signalData, yData, signalAmps, numPerDataSet, paramete
     templates, _, density, _, templateLengths, L, vals = returnTemplates(yData, signalData, minTemplateLength, kdNeighbors)
 
     ####################################################
+    bend = plt.get_backend()
+    plt.switch_backend('Agg')
     wbounds = np.where(roberts(L).astype('bool'))
     wbounds = (wbounds[1], wbounds[0])
     fig, ax = plt.subplots()
@@ -156,6 +161,7 @@ def findTemplatesFromData(signalData, yData, signalAmps, numPerDataSet, paramete
     ax.scatter(wbounds[0], wbounds[1], color='k', s=0.1)
     fig.savefig(projectionFile[:-4]+'_trainingtSNE.png')
     plt.close()
+    plt.switch_backend(bend)
     ####################################################
 
     N = len(templates)
@@ -200,8 +206,23 @@ def mm_findWavelets(projections, numModes, parameters):
 
     amplitudes, f = findWavelets(projections, numModes, parameters.omega0, parameters.numPeriods,
                                  parameters.samplingFreq, parameters.maxF, parameters.minF, parameters.numProcessors,
-                                 parameters.useGPU)
+                                 parameters.useGPU, verbose=parameters.get('verbose', True))
     return amplitudes, f
+
+
+def waveletTransform(projections, parameters, numModes=None):
+    """Morlet wavelet amplitudes of a (T, numModes) projection time series, taking every setting
+    from a parameters dict -- a convenience wrapper around findWavelets so callers don't pass nine
+    positional arguments.
+
+    :param projections: (T, numModes) array of low-dimensional features.
+    :param parameters: motionmapperpy parameters dict.
+    :param numModes: number of feature channels (defaults to parameters.pcaModes).
+    :return: (amplitudes (T, numModes*numPeriods), frequencies (numPeriods,)).
+    """
+    if numModes is None:
+        numModes = parameters.pcaModes
+    return mm_findWavelets(projections, numModes, parameters)
 
 def file_embeddingSubSampling(projectionFile, parameters):
     perplexity = parameters.training_perplexity
@@ -644,4 +665,39 @@ def findEmbeddings(projections, trainingData, trainingEmbedding, parameters):
     print('Embeddings found in %0.02f seconds.'%(time.time()-t1))
 
     return zValues,outputStatistics
+
+
+def embedProject(parameters, skip_done=True):
+    """Re-embed every dataset in a project onto the trained map, in one call.
+
+    Loads the training set + embedding produced by ``subsampled_tsne_from_projections``, runs
+    ``findEmbeddings`` on each ``Projections/*_pcaModes.mat`` file, and saves the resulting 2-D
+    embedding next to it (``*_uVals.mat`` for UMAP, ``*_zVals.mat`` for t-SNE). This replaces the
+    common boilerplate loop of loading the training data via h5py, globbing the projection files,
+    branching on the method's filename suffix, and writing each result.
+
+    :param parameters: motionmapperpy parameters dict (with projectPath + method set).
+    :param skip_done: skip datasets whose embedding file already exists (default True).
+    :return: list of embedding files written this call.
+    """
+    from .mmutils import embeddingSuffix, loadTrainingSet, loadProjections
+    verbose = parameters.get('verbose', True)
+    trainingSetData, trainingEmbedding = loadTrainingSet(parameters)
+    suffix = embeddingSuffix(parameters)
+    files = sorted(glob.glob(parameters['projectPath'] + '/Projections/*_pcaModes.mat'))
+    written = []
+    for i, pf in enumerate(files):
+        outfile = pf[:-4] + '_%s.mat' % suffix
+        if skip_done and os.path.exists(outfile):
+            if verbose:
+                print('Skipping (already embedded): %s' % os.path.basename(pf))
+            continue
+        if verbose:
+            print('Embedding %i/%i : %s' % (i + 1, len(files), os.path.basename(pf)))
+        projections = loadProjections(pf)
+        zValues, _ = findEmbeddings(projections, trainingSetData, trainingEmbedding, parameters)
+        hdf5storage.write(data={'zValues': zValues}, path='/', truncate_existing=True,
+                          filename=outfile, store_python_metadata=False, matlab_compatible=True)
+        written.append(outfile)
+    return written
 

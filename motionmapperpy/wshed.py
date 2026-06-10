@@ -142,7 +142,7 @@ def makeGroupsAndSegments(watershedRegions, zValLens, min_length=10, max_length=
 
 
 def findWatershedRegions(parameters, minimum_regions=150, startsigma=0.1, pThreshold=None,saveplot=True, endident = '*_pcaModes.mat',
-                         min_length_videos=10):
+                         min_length_videos=10, stereotypyFiltering=False):
     projectionfolder = parameters.projectPath + '/Projections/'
     if parameters.method == 'TSNE':
         if parameters.waveletDecomp:
@@ -189,42 +189,27 @@ def findWatershedRegions(parameters, minimum_regions=150, startsigma=0.1, pThres
     zValLens = np.array(zValLens)
     # print(zValNames)
     zValNames = np.array(zValNames, dtype=object)
-    LL, wbounds, sigma, xx, density = wshedTransform(zValues, minimum_regions, startsigma, tsnefolder, saveplot=True)
+    LL, wbounds, sigma, xx, density = wshedTransform(zValues, minimum_regions, startsigma, tsnefolder, saveplot=saveplot)
 
     print('Assigning watershed regions...')
     watershedRegions = np.digitize(zValues, xx)
     watershedRegions = LL[watershedRegions[:, 1], watershedRegions[:, 0]]
 
-    if parameters.method == 'TSNE':
+    # Velocity-based stereotypy filtering: always for t-SNE (original behavior), and optionally
+    # for UMAP when stereotypyFiltering=True (previously the UMAP path skipped this, pRest = 1.0).
+    if parameters.method == 'TSNE' or stereotypyFiltering:
         print('Calculating velocity distributions...')
         ampVels, pRest = velGMM(ampVels, parameters, parameters.projectPath, saveplot=saveplot)
-
-        outdict = {'zValues': zValues, 'zValNames': zValNames, 'zValLens': zValLens, 'sigma': sigma, 'xx': xx,
-                   'density': density, 'LL': LL, 'watershedRegions': watershedRegions, 'v': ampVels, 'pRest': pRest,
-                   'wbounds': wbounds}
-        hdf5storage.write(data=outdict, path='/', truncate_existing=True,
-                          filename=tsnefolder + 'zVals_wShed_groups.mat', store_python_metadata=False,
-                          matlab_compatible=True)
-
-        print('\t tempsave done.')
-
         t1 = time.time()
         print('Adjusting non-stereotypic regions to 0...')
         bwconn = np.convolve((np.diff(watershedRegions) == 0).astype(bool), np.array([True, True]))
         pGoodRest = pRest > np.min(parameters.pThreshold)
-        badinds = ~np.bitwise_and(bwconn, pGoodRest)
-        watershedRegions[badinds] = 0
-        print('\t Done. %0.02f seconds'%(time.time()-t1))
+        watershedRegions[~np.bitwise_and(bwconn, pGoodRest)] = 0
+        print('\t Done. %0.02f seconds' % (time.time() - t1))
     else:
         pRest = 1.0
-    outdict = {'zValues':zValues, 'zValNames':zValNames, 'zValLens':zValLens, 'sigma':sigma, 'xx':xx,
-               'density':density, 'LL':LL, 'watershedRegions':watershedRegions, 'v':ampVels, 'pRest':pRest,
-               'wbounds':wbounds}
-    hdf5storage.write(data=outdict, path='/', truncate_existing=True,
-                          filename=tsnefolder + 'zVals_wShed_groups.mat', store_python_metadata=False,
-                          matlab_compatible=True)
-    print('\t tempsave done.')
 
+    # Single write of the complete result (previously written three times as intermediate saves).
     groups = makeGroupsAndSegments(watershedRegions, zValLens, min_length=min_length_videos)
     outdict = {'zValues': zValues, 'zValNames': zValNames, 'zValLens': zValLens, 'sigma': sigma, 'xx': xx,
                'density': density, 'LL': LL, 'watershedRegions': watershedRegions, 'v': ampVels, 'pRest': pRest,
@@ -232,7 +217,97 @@ def findWatershedRegions(parameters, minimum_regions=150, startsigma=0.1, pThres
     hdf5storage.write(data=outdict, path='/', truncate_existing=True,
                       filename=tsnefolder + 'zVals_wShed_groups.mat', store_python_metadata=False,
                       matlab_compatible=True)
+    print('All data saved in %s.' % (tsnefolder.split('/')[-2] + '/zVals_wShed_groups.mat'))
 
-    print('All data saved in %s.'%(tsnefolder.split('/')[-2]+'/zVals_wShed_groups.mat'))
+
+def velocityStereotypy(wshedfile, parameters, saveplot=False):
+    """Per-frame stereotypy from the bimodal log-velocity GMM (Berman et al. 2014).
+
+    Works for any map, including UMAP (where findWatershedRegions skips this by default). Fits a
+    2-component Gaussian mixture to log map-velocities and returns the probability that each frame
+    is in the slow / stereotyped mode, plus a copy of the watershed-region labels with the
+    non-stereotyped frames set to 0.
+
+    :param wshedfile: a loaded zVals_wShed_groups dict (see mmutils.loadWatershed).
+    :param parameters: motionmapperpy parameters dict.
+    :return: (pRest (N,), stereotypedRegions (N,)).
+    """
+    if parameters.get('pThreshold', None) is None:
+        parameters.pThreshold = [0.33, 0.67]
+    ampVels = np.asarray(wshedfile['v']).flatten()
+    _, pRest = velGMM(ampVels, parameters, parameters['projectPath'], saveplot=saveplot)
+    wregs = np.asarray(wshedfile['watershedRegions']).flatten().astype(int).copy()
+    bwconn = np.convolve((np.diff(wregs) == 0).astype(bool), np.array([True, True]))
+    pGoodRest = pRest > np.min(parameters.pThreshold)
+    wregs[~np.bitwise_and(bwconn[:len(wregs)], pGoodRest[:len(wregs)])] = 0
+    return pRest, wregs
+
+
+def makeRegionVideo(region, parameters, wshedfile, render_frame, n_examples=4, animfps=30.0,
+                    minLength=10, maxLength=100, submaxframes=500, outdir=None):
+    """Make an exemplar grid video for one watershed region (animal-agnostic).
+
+    Generalizes the species-specific makeregionvideo_* helpers: rather than hard-coding how a frame
+    is drawn, pass a callback ``render_frame(dataset_index, frame_index, ax)`` that draws a single
+    frame onto a matplotlib Axes (e.g. show the video frame and overlay the tracked skeleton). The
+    function picks representative segments of the region, tiles an NxN grid, and writes an mp4.
+
+    :param region: 1-based watershed region number.
+    :param parameters: motionmapperpy parameters dict.
+    :param wshedfile: loaded zVals_wShed_groups dict.
+    :param render_frame: callable ``(dataset_index, frame_index, matplotlib_axes) -> None``.
+    :param n_examples: maximum number of example segments to tile.
+    :return: path to the written mp4, or None if the region has no usable segments.
+    """
+    try:
+        from moviepy.editor import VideoClip                       # moviepy 1.x
+    except Exception:
+        from moviepy import VideoClip                              # moviepy 2.x
+    from moviepy.video.io.bindings import mplfig_to_npimage
+    groups = makeGroupsAndSegments(np.asarray(wshedfile['watershedRegions']).flatten(),
+                                   np.asarray(wshedfile['zValLens']).flatten(),
+                                   min_length=minLength, max_length=maxLength)
+    nregs = len(groups)
+    if outdir is None:
+        outdir = '%s/%s/region_videos_%i/' % (parameters['projectPath'], parameters['method'], nregs)
+    os.makedirs(outdir, exist_ok=True)
+    outfile = outdir + 'regions_%.3i.mp4' % region
+    g = (groups - 1)[region - 1][0]                       # 0-based dataset + frame indices
+    if g.shape[0] <= 1:
+        print('[Region %i] no segments.' % region)
+        return None
+    nframes = np.atleast_1d(np.diff(g[:, 1:], axis=1).squeeze())
+    valid = np.where(nframes < submaxframes)[0]
+    if len(valid) == 0:
+        print('[Region %i] all segments longer than %i frames.' % (region, submaxframes))
+        return None
+    nplots = int(min(n_examples, len(valid)))
+    sel = valid[np.argsort(nframes[valid])[::-1]][:nplots]
+    vidinds = g[sel, 0]
+    framelists = [np.arange(g[i, 1], g[i, 2]) for i in sel]
+    maxsize = max(len(fr) for fr in framelists)
+    subx = max(1, int(np.ceil(np.sqrt(nplots))))
+
+    bend = plt.get_backend()
+    plt.switch_backend('Agg')
+    fig, axes = plt.subplots(subx, subx, figsize=(10, 10), squeeze=False)
+    fig.subplots_adjust(0, 0, 1, 1, 0, 0)
+
+    def make_frame(t):
+        j_ = int(t * animfps)
+        for i in range(subx * subx):
+            ax = axes[i // subx, i % subx]
+            ax.clear(); ax.axis('off')
+            if i >= nplots:
+                continue
+            j = j_ % len(framelists[i])
+            render_frame(int(vidinds[i]), int(framelists[i][j]), ax)
+        return mplfig_to_npimage(fig)
+
+    VideoClip(make_frame, duration=maxsize / animfps).write_videofile(
+        outfile, fps=animfps, audio=False, threads=1, logger=None)
+    plt.close(fig)
+    plt.switch_backend(bend)
+    return outfile
 
 

@@ -21,6 +21,9 @@ def setRunParameters(parameters=None):
 
     method = 'TSNE' # or 'UMAP'
 
+    # %whether to print progress messages (set False for quieter notebook output)
+    verbose = True
+
 
     """%%%%%%%% Wavelet Parameters %%%%%%%%"""
     # %Whether to do wavelet decomposition, if False then use normalized projections for tSNE embedding.
@@ -178,5 +181,8 @@ def setRunParameters(parameters=None):
 
     if not 'method' in parameters.keys():
         parameters.method = method
+
+    if not 'verbose' in parameters.keys():
+        parameters.verbose = verbose
 
     return parameters
