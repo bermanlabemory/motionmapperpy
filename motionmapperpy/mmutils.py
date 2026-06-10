@@ -171,7 +171,9 @@ def loadProjections(projectionFile, variable='projections'):
 def saveProjections(parameters, name, projections):
     """Save a (T, pcaModes) projections array to Projections/<name>_pcaModes.mat."""
     path = '%s/Projections/%s_pcaModes.mat' % (parameters['projectPath'], name)
-    hdf5storage.savemat(path, {'projections': np.asarray(projections)})
+    hdf5storage.write(data={'projections': np.asarray(projections)}, path='/',
+                      truncate_existing=True, filename=path,
+                      store_python_metadata=False, matlab_compatible=True)
     return path
 
 
