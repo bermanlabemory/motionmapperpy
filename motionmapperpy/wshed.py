@@ -13,28 +13,48 @@ from .mmutils import *
 bmapcmap = gencmap()
 
 
-def wshedTransform(zValues, min_regions, sigma, tsnefolder, saveplot=True):
+def wshedTransform(zValues, min_regions, sigma, tsnefolder, saveplot=True, num_regions=-1):
+    # The region count falls as sigma grows (a smoother density merges neighbouring peaks). Two modes:
+    #   num_regions >= 0 : sweep sigma and keep the count *closest* to num_regions (a target count).
+    #   num_regions <  0 : treat min_regions as a true floor -- coarsen as far as possible while
+    #                      keeping AT LEAST min_regions regions.
     print('Starting watershed transform...')
+    rangeVals = [-np.abs(zValues).max() - 15, np.abs(zValues).max() + 15]
 
-    bounds, xx, density = findPointDensity(zValues, sigma, 610,
-                                                   rangeVals=[-np.abs(zValues).max() - 15, np.abs(zValues).max() + 15])
-    wshed = watershed(-density, connectivity=10)
-    wshed[density < 1e-5] = 0
-    numRegs = len(np.unique(wshed)) - 1
+    def _wshed_at(s):
+        _, xx_, dens_ = findPointDensity(zValues, s, 611, rangeVals=rangeVals)
+        w_ = watershed(-dens_, connectivity=10)
+        w_[dens_ < 1e-5] = 0
+        return w_, len(np.unique(w_)) - 1, xx_, dens_
 
-    if numRegs < min_regions - 10:
-        raise ValueError('\t Starting sigma %0.1f too high, maximum # wshed regions possible is %i.' %
-                         (sigma, numRegs))
+    exact = num_regions is not None and num_regions >= 0
+    target = num_regions if exact else min_regions
+    tname = 'num_regions' if exact else 'minimum_regions'
 
-    while numRegs > min_regions:
-        sigma += 0.05
-        _, xx, density = findPointDensity(zValues, sigma, 611,
-                                                  rangeVals=[-np.abs(zValues).max() - 15, np.abs(zValues).max() + 15])
-        wshed = watershed(-density, connectivity=10)
-        wshed[density < 1e-5] = 0
+    wshed, numRegs, xx, density = _wshed_at(sigma)
+    if numRegs < target:
+        raise ValueError('\t Starting sigma %0.2f is too high: it already yields only %i regions, fewer '
+                         'than the requested %s=%i. Lower startsigma and try again.'
+                         % (sigma, numRegs, tname, target))
 
-        numRegs = len(np.unique(wshed)) - 1
-        print('\t Sigma %0.2f, Regions %i' % (sigma, numRegs), end='\r')
+    if exact:
+        best = (wshed, numRegs, xx, density, sigma)        # closest-to-target seen so far
+        while numRegs > target and sigma < 20.0:
+            sigma += 0.05
+            wshed, numRegs, xx, density = _wshed_at(sigma)
+            print('\t Sigma %0.2f, Regions %i' % (sigma, numRegs), end='\r')
+            if abs(numRegs - target) < abs(best[1] - target):
+                best = (wshed, numRegs, xx, density, sigma)
+        wshed, numRegs, xx, density, sigma = best
+    else:
+        while sigma < 20.0:                                # stop just before we'd drop below the floor
+            w2, n2, xx2, dens2 = _wshed_at(sigma + 0.05)
+            print('\t Sigma %0.2f, Regions %i' % (sigma + 0.05, n2), end='\r')
+            if n2 < target:
+                break
+            wshed, numRegs, xx, density, sigma = w2, n2, xx2, dens2, sigma + 0.05
+    print('\n\t Using sigma %0.2f -> %i regions.' % (sigma, numRegs))
+
     for i, wreg in enumerate(np.unique(wshed)):
         wshed[wshed == wreg] = i
     wbounds = np.where(roberts(wshed).astype('bool'))
@@ -141,8 +161,23 @@ def makeGroupsAndSegments(watershedRegions, zValLens, min_length=10, max_length=
     return groups
 
 
-def findWatershedRegions(parameters, minimum_regions=150, startsigma=0.1, pThreshold=None,saveplot=True, endident = '*_pcaModes.mat',
-                         min_length_videos=10, stereotypyFiltering=False):
+def findWatershedRegions(parameters, minimum_regions=150, startsigma=0.1, pThreshold=None, saveplot=True,
+                         endident='*_pcaModes.mat', min_length_videos=10, stereotypyFiltering=False,
+                         num_regions=-1):
+    """Watershed-segment the behavioral density map into discrete regions.
+
+    The map is smoothed with a Gaussian of width ``startsigma`` and then progressively coarsened
+    (larger sigma merges peaks, so the region count falls). How the stopping count is chosen:
+
+    - ``num_regions`` (>= 0): aim for this *exact* number of regions -- the sweep keeps the sigma whose
+      region count is closest to it.
+    - ``num_regions`` left at the default -1: ``minimum_regions`` acts as a true *minimum* -- coarsen as
+      far as possible while keeping **at least** ``minimum_regions`` regions. (Note: historically
+      ``minimum_regions`` behaved as a ceiling; it is now a genuine floor.)
+
+    ``startsigma`` must be small enough to begin with MORE regions than the target, since smoothing can
+    only reduce the count; lower it if you hit the "starting sigma too high" error.
+    """
     projectionfolder = parameters.projectPath + '/Projections/'
     if parameters.method == 'TSNE':
         if parameters.waveletDecomp:
@@ -189,7 +224,8 @@ def findWatershedRegions(parameters, minimum_regions=150, startsigma=0.1, pThres
     zValLens = np.array(zValLens)
     # print(zValNames)
     zValNames = np.array(zValNames, dtype=object)
-    LL, wbounds, sigma, xx, density = wshedTransform(zValues, minimum_regions, startsigma, tsnefolder, saveplot=saveplot)
+    LL, wbounds, sigma, xx, density = wshedTransform(zValues, minimum_regions, startsigma, tsnefolder,
+                                                     saveplot=saveplot, num_regions=num_regions)
 
     print('Assigning watershed regions...')
     watershedRegions = np.digitize(zValues, xx)
