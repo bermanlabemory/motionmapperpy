@@ -126,5 +126,5 @@ for i in range(len(projectionFiles)):
 
 print('All Embeddings Saved!')
 
-mmpy.findWatershedRegions(parameters, minimum_regions=150, startsigma=0.3, pThreshold=[0.33, 0.67],
+mmpy.findWatershedRegions(parameters, num_regions=150, startsigma=0.3, pThreshold=[0.33, 0.67],
                      saveplot=True, endident = '*_pcaModes.mat')

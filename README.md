@@ -15,8 +15,7 @@ Package functions are:
 3. Download the repository and unzip contents. Open terminal and navigate to unzipped folder containing setup.py.
 4. Run 
 ```
-pip install -U h5py==2.1 
-pip install numpy scikit-image hdf5storage
+pip install numpy scipy scikit-image scikit-learn h5py hdf5storage
 python setup.py install
 ```
 ### Using the supplied Pixi environment

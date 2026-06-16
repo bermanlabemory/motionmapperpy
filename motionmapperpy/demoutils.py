@@ -3,8 +3,20 @@ import os, easydict, time
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-from moviepy.editor import VideoClip
-from moviepy.video.io.bindings import mplfig_to_npimage
+# moviepy is only needed for the region-video helpers, and its import path changed between
+# 1.x ('moviepy.editor') and 2.x ('moviepy'). Import it defensively so that simply importing
+# motionmapperpy never fails just because moviepy is absent or a different major version.
+try:
+    from moviepy.editor import VideoClip
+except Exception:
+    try:
+        from moviepy import VideoClip
+    except Exception:
+        VideoClip = None
+try:
+    from moviepy.video.io.bindings import mplfig_to_npimage
+except Exception:
+    mplfig_to_npimage = None
 import hdf5storage
 from .wshed import makeGroupsAndSegments
 

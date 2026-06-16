@@ -8,7 +8,8 @@ kanishkbjain@gmail.com
 
 import time
 import warnings
-def findWavelets(projections, pcaModes, omega0, numPeriods, samplingFreq, maxF, minF, numProcessors, useGPU):
+def findWavelets(projections, pcaModes, omega0, numPeriods, samplingFreq, maxF, minF, numProcessors, useGPU,
+                 verbose=True):
     """
     findWavelets finds the wavelet transforms resulting from a time series.
     :param projections: N x d array of projection values.
@@ -26,7 +27,8 @@ def findWavelets(projections, pcaModes, omega0, numPeriods, samplingFreq, maxF, 
 
     """
     t1 = time.time()
-    print('\t Calculating wavelets, clock starting.')
+    if verbose:
+        print('\t Calculating wavelets, clock starting.')
 
     if useGPU>=0:
         try:
@@ -37,13 +39,15 @@ def findWavelets(projections, pcaModes, omega0, numPeriods, samplingFreq, maxF, 
             raise E
 
         np.cuda.Device(useGPU).use()
-        print('\t Using GPU #%i'%useGPU)
+        if verbose:
+            print('\t Using GPU #%i'%useGPU)
     else:
         import numpy as np
         import multiprocessing as mp
         if numProcessors<0:
             numProcessors = mp.cpu_count()
-        print('\t Using #%i CPUs.' % numProcessors)
+        if verbose:
+            print('\t Using #%i CPUs.' % numProcessors)
 
     projections = np.array(projections)
     t1 = time.time()
@@ -59,19 +63,23 @@ def findWavelets(projections, pcaModes, omega0, numPeriods, samplingFreq, maxF, 
         amplitudes = np.zeros((numPeriods*pcaModes,N))
         for i in range(pcaModes):
             amplitudes[i*numPeriods:(i+1)*numPeriods] = fastWavelet_morlet_convolution_parallel(i, projections[:, i], f, omega0, dt, useGPU)
+    elif pcaModes <= 2 or numProcessors == 1:
+        # Few modes: skip the multiprocessing pool -- its setup costs more than the work.
+        amplitudes = np.concatenate([fastWavelet_morlet_convolution_parallel(i, projections[:, i], f, omega0, dt, useGPU)
+                                     for i in range(pcaModes)], 0)
     else:
+        pool = None
         try:
             pool = mp.Pool(numProcessors)
             amplitudes = pool.starmap(fastWavelet_morlet_convolution_parallel,
                                       [(i, projections[:, i], f, omega0, dt, useGPU) for i in range(pcaModes)])
             amplitudes = np.concatenate(amplitudes, 0)
-            pool.close()
-            pool.join()
-        except Exception as E:
-            pool.close()
-            pool.join()
-            raise E
-    print('\t Done at %0.02f seconds.'%(time.time()-t1))
+        finally:
+            if pool is not None:
+                pool.close()
+                pool.join()
+    if verbose:
+        print('\t Done at %0.02f seconds.'%(time.time()-t1))
     return amplitudes.T, f
 
 

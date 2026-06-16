@@ -35,7 +35,7 @@ def createProjectDirectory(pathToProject):
     for d in _dirs:
         if not os.path.exists(d):
             print('Creating : %s'%d)
-            os.mkdir(d)
+            os.makedirs(d, exist_ok=True)
         else:
             print('Skipping, path already exists : %s'%d)
     return
@@ -119,8 +119,78 @@ def conV2matV7(matfile):
             return
 
 def checkParams(parameters, projections):
-    if np.any([p.shape[0]<parameters.numPoints  for p in projections]):
+    if np.any([p.shape[0]<parameters.training_numPoints  for p in projections]):
         plens = [p.shape[0] for p in projections]
         print(plens)
         print('Training number of points for miniTSNE is greater than # samples in some files. Adjust it to '
               'smallest # samples : %i'%(np.min(plens)))
+
+
+"""Project I/O helpers -- hide the loadmat / h5py / hdf5storage + naming-convention boilerplate."""
+
+
+def embeddingFolder(parameters):
+    """Subfolder holding the training set + embeddings for the current method
+    ('/TSNE/', '/TSNE_Projections/' or '/UMAP/')."""
+    p = parameters['projectPath']
+    if parameters['method'] == 'TSNE':
+        return p + ('/TSNE/' if parameters.get('waveletDecomp', True) else '/TSNE_Projections/')
+    elif parameters['method'] == 'UMAP':
+        return p + '/UMAP/'
+    raise ValueError("parameters.method must be 'TSNE' or 'UMAP'.")
+
+
+def embeddingSuffix(parameters):
+    """Filename suffix for a per-dataset embedding: 'zVals', 'zValsProjs' or 'uVals'."""
+    if parameters['method'] == 'TSNE':
+        return 'zVals' if parameters.get('waveletDecomp', True) else 'zValsProjs'
+    return 'uVals'
+
+
+def readMat(path, variable_names=None):
+    """Robustly load a .mat file regardless of version: scipy.io for v7, h5py (transposed) for
+    MATLAB v7.3 / hdf5storage files. Returns a dict of arrays."""
+    try:
+        d = loadmat(path, variable_names=variable_names)
+        return {k: v for k, v in d.items() if not k.startswith('__')}
+    except (NotImplementedError, ValueError):
+        out = {}
+        with h5py.File(path, 'r') as f:
+            keys = list(f.keys()) if variable_names is None else variable_names
+            for k in keys:
+                if k in f:
+                    out[k] = np.array(f[k]).T
+        return out
+
+
+def loadProjections(projectionFile, variable='projections'):
+    """Load a projections array from a Projections/*_pcaModes.mat file."""
+    return readMat(projectionFile, [variable])[variable]
+
+
+def saveProjections(parameters, name, projections):
+    """Save a (T, pcaModes) projections array to Projections/<name>_pcaModes.mat."""
+    path = '%s/Projections/%s_pcaModes.mat' % (parameters['projectPath'], name)
+    hdf5storage.write(data={'projections': np.asarray(projections)}, path='/',
+                      truncate_existing=True, filename=path,
+                      store_python_metadata=False, matlab_compatible=True)
+    return path
+
+
+def loadTrainingSet(parameters):
+    """Return (trainingSetData, trainingEmbedding) for the current method."""
+    folder = embeddingFolder(parameters)
+    data = readMat(folder + 'training_data.mat', ['trainingSetData'])['trainingSetData']
+    emb = readMat(folder + 'training_embedding.mat', ['trainingEmbedding'])['trainingEmbedding']
+    return data, emb
+
+
+def loadEmbeddings(parameters, name):
+    """Load the 2-D embedding (zValues) of one dataset by name."""
+    f = '%s/Projections/%s_%s.mat' % (parameters['projectPath'], name, embeddingSuffix(parameters))
+    return readMat(f, ['zValues'])['zValues']
+
+
+def loadWatershed(parameters):
+    """Load the full zVals_wShed_groups dict for the current method."""
+    return readMat(embeddingFolder(parameters) + 'zVals_wShed_groups.mat')
